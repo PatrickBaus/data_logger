@@ -1,0 +1,7 @@
+aiofiles>=0.7.0
+async-timeout>=3.0.1
+numpy>=1.21.0
+pyserial>=3.5
+pyserial-asyncio>=0.5
+tinkerforge-async>=1.1.4
+async-gpib>=1.0.1
