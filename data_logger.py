@@ -293,7 +293,7 @@ class LoggingDaemon():
                 done = True
                 for result in results:
                     if isinstance(result, Exception):
-                        self.__logger.error(result)
+                        self.__logger.error(result, exc_info=result)
                         done = False
                 if done:    # pylint: disable=no-else-return
                     return (datetime.utcnow(), tuple(sum(results, ())))
@@ -382,7 +382,7 @@ class LoggingDaemon():
                                 temperature_setpoint, current_temperature
                             )
             except ValueError as exc:
-                self.__logger.error(exc)
+                self.__logger.exception("Invalid return value during data processing.")
             except Exception:
                 self.__logger.exception("Error while running main_loop.")
                 break

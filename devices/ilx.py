@@ -21,8 +21,6 @@ import asyncio
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 
-import async_timeout
-
 class LdtMode(Enum):
     T = "T"
     SENSOR = "SENSOR"
@@ -55,8 +53,7 @@ class LDT5948:
         await self.__conn.connect()
         self.__lock = asyncio.Lock()
         try:
-            with async_timeout.timeout(0.1):    # 100ms timeout
-                await self.read()
+            await asyncio.wait_for(self.read(), timeout=0.1)    # 100ms timeout
         except asyncio.TimeoutError:
             pass
 

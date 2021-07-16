@@ -20,7 +20,6 @@
 import asyncio
 import logging
 
-import async_timeout
 import serial_asyncio
 
 class AsyncSerial:
@@ -48,7 +47,7 @@ class AsyncSerial:
     async def read(self, length=None):
         if self.is_connected:
             try:
-                with async_timeout.timeout(self.__timeout) as context_manager:
+                async with timeout(self.__timeout) as context_manager:
                     async with self.__lock:
                         if length is None:
                             # Read until the separator
@@ -68,13 +67,7 @@ class AsyncSerial:
     async def write(self, cmd):
         if self.is_connected:
             self.__writer.write(cmd.encode())
-            try:
-                with async_timeout.timeout(self.__timeout) as context_manager:
-                    await self.__writer.drain()
-            except asyncio.CancelledError:
-                if context_manager.expired:
-                    raise asyncio.TimeoutError() from None
-                raise
+            await asyncio.wait_for(self.__writer.drain(), timeout=self.__timeout)
         else:
             # TODO: raise custom error
             pass
@@ -82,19 +75,13 @@ class AsyncSerial:
     async def connect(self):
         if not self.is_connected:
             self.__lock = asyncio.Lock()
-            with async_timeout.timeout(self.__timeout) as context_manager:
-                try:
-                    self.__reader, self.__writer = await serial_asyncio.open_serial_connection(
-                        url=self.__tty,
-                        **self.__kwargs
-                    )
-                except asyncio.CancelledError:
-                    if context_manager.expired:
-                        raise asyncio.TimeoutError() from None
-                    raise
-                except asyncio.TimeoutError:
-                    # TODO: raise custom error
-                    raise
+            self.__reader, self.__writer = await asyncio.wait_for(
+                self.__reader, self.__writer = await serial_asyncio.open_serial_connection(
+                    url=self.__tty,
+                    **self.__kwargs
+                ),
+                timeout=self.__timeout
+            )
 
             self.__writer.transport.serial.reset_input_buffer()
             self.__logger.info("Serial connection established")

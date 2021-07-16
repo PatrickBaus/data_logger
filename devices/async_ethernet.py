@@ -20,8 +20,6 @@
 import asyncio
 import logging
 
-import async_timeout
-
 class AsyncEthernet:
     @property
     def separator(self):
@@ -35,7 +33,7 @@ class AsyncEthernet:
     def is_connected(self):
         return self.__writer is not None and not self.__writer.is_closing()
 
-    def __init__(self, host, port, separator=b"\n", timeout=None, **kwargs):
+    def __init__(self, host, port, separator=b'\n', timeout=None, **kwargs):
         self.__hostname = host, port
         self.__separator = separator
         self.__kwargs = kwargs
@@ -45,19 +43,17 @@ class AsyncEthernet:
 
     async def read(self, length=None):
         if self.is_connected:
-            try:
-                with async_timeout.timeout(self.__timeout) as context_manager:
-                    if length is None:
-                        # Read until the separator
-                        data = await self.__reader.readuntil(self.__separator)
-                    else:
-                        # read $length bytes
-                        data = await self.__reader.readexactly(length)
-                    return data.decode("utf-8")
-            except asyncio.CancelledError:
-                if context_manager.expired:
-                    raise asyncio.TimeoutError() from None
-                raise
+            if length is None:
+                data = await asyncio.wait_for(
+                    self.__reader.readuntil(self.__separator),
+                    timeout=self.__timeout
+                )
+            else:
+                data = await asyncio.wait_for(
+                    self.__reader.readexactly(length),
+                    timeout=self.__timeout
+                )
+            return data.decode("utf-8")
         else:
             # TODO: raise custom error
             pass
@@ -65,35 +61,18 @@ class AsyncEthernet:
     async def write(self, cmd):
         if self.is_connected:
             self.__writer.write(cmd.encode())
-            try:
-                with async_timeout.timeout(self.__timeout) as context_manager:
-                    await self.__writer.drain()
-            except asyncio.CancelledError:
-                if context_manager.expired:
-                    raise asyncio.TimeoutError() from None
-                raise
+            await asyncio.wait_for(self.__writer.drain(), timeout=self.__timeout)
         else:
             # TODO: raise custom error
             pass
 
     async def connect(self):
         if not self.is_connected:
-            with async_timeout.timeout(self.__timeout) as context_manager:
-                try:
-                    host, port = self.__hostname
-                    self.__reader, self.__writer = await asyncio.open_connection(
-                        host=host,
-                        port=port,
-                        **self.__kwargs
-                    )
-                except asyncio.CancelledError:
-                    if context_manager.expired:
-                        raise asyncio.TimeoutError() from None
-                    raise
-                except asyncio.TimeoutError:
-                    # TODO: raise custom error
-                    raise
-
+            host, port = self.__hostname
+            self.__reader, self.__writer = await asyncio.wait_for(
+                asyncio.open_connection(host=host, port=port, **self.__kwargs),
+                timeout=self.__timeout
+            )
             self.__logger.info('Ethernet connection established')
 
     async def disconnect(self):

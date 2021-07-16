@@ -18,7 +18,6 @@
 # ##### END GPL LICENSE BLOCK #####
 
 import asyncio
-import async_timeout
 
 class EE07:
     @property
@@ -46,12 +45,11 @@ class EE07:
         await self.__conn.connect()
         self.__lock = asyncio.Lock()
         await self.write("")  # Flush input buffer of the device
-        try:
-            while "device output buffer not empty":
-                with async_timeout.timeout(0.1):    # 100ms timeout
-                    await self.read()
-        except asyncio.TimeoutError:
-            pass
+        while "device output buffer not empty":
+            try:
+                await asyncio.wait_for(self.read(), timeout=0.1)    # 100ms timeout
+            except asyncio.TimeoutError:
+                break
 
     async def disconnect(self):
         await self.__conn.disconnect()

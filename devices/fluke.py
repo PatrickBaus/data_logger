@@ -18,7 +18,6 @@
 # ##### END GPL LICENSE BLOCK #####
 
 import asyncio
-import async_timeout
 import serial_asyncio
 
 class Fluke1524():
@@ -43,9 +42,7 @@ class Fluke1524():
         await self.__conn.connect()
         self.__lock = asyncio.Lock()
         try:
-            while "device output buffer not empty":
-                with async_timeout.timeout(0.1):    # 100ms timeout
-                    await self.read()
+            await asyncio.wait_for(self.read(), timeout=0.1)    # 100ms timeout
         except asyncio.TimeoutError:
             pass
 
@@ -84,8 +81,7 @@ class Fluke_1524():
         self.__writer.transport.serial.reset_input_buffer()
         self.__writer.write("\r\n".encode())    # Flush input buffer of the device
         try:
-            with async_timeout.timeout(0.1):    # 100ms timeout
-                await self.read()
+            await asyncio.wait_for(self.read(), timeout=0.1)    # 100ms timeout
         except asyncio.TimeoutError:
             pass
 
