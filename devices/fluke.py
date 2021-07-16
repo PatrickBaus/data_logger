@@ -42,7 +42,7 @@ class Fluke1524():
     async def connect(self):
         await self.__conn.connect()
         self.__lock = asyncio.Lock()
-        self.write("")    # Flush input buffer of the device
+        await self.write("")    # Flush input buffer of the device
         try:
             await asyncio.wait_for(self.read(), timeout=0.1)    # 100ms timeout
         except asyncio.TimeoutError:
