@@ -47,15 +47,10 @@ class AsyncSerial:
     async def read(self, length=None):
         if self.is_connected:
             if length is None:
-                data = await asyncio.wait_for(
-                    self.__reader.readuntil(self.__separator),
-                    timeout=self.__timeout
-                )
+                coro = self.__reader.readuntil(self.__separator)
             else:
-                data = await asyncio.wait_for(
-                    self.__reader.readexactly(length),
-                    timeout=self.__timeout
-                )
+                coro = self.__reader.readexactly(length)
+            data = await asyncio.wait_for(coro, timeout=self.__timeout)
             return data.decode("utf-8")
         else:
             # TODO: raise custom error
