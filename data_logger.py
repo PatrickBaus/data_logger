@@ -43,6 +43,8 @@ from devices.fluke import Fluke1524
 from devices.e_plus_e import EE07
 from devices.ilx import LdtMode, LDT5948
 
+from _version import __version__
+
 DEFAULT_WAIT_TIMEOUT = 10 # in seconds
 LOG_LEVEL = logging.INFO
 
@@ -225,7 +227,7 @@ class LoggingDaemon():
         self.__filehandle = None
 
     async def __init_daemon(self):
-        self.__logger.debug('Initializing Logging Daemon')
+        self.__logger.debug('Initializing Logging daemon')
 
         # Connect to all loggers
         coros = [device.connect() for device in self.__devices.values()]
@@ -240,6 +242,10 @@ class LoggingDaemon():
         self.__logger.info("File '%s' opened.", self.__filename)
 
         # Write header
+        await self.__filehandle.write(("# This file was generated using the Python data logger"
+            f" script v{__version__}.\n"
+            "# Check https://github.com/PatrickBaus/data_logger for the latest version.\n"
+        ))
         await self.__filehandle.write(f"# {self.__file_description}\n")
         coros = [device.get_log_header() for device in self.__devices.values()]
         file_headers = await asyncio.gather(*coros)
@@ -499,7 +505,7 @@ try:
         filename="LM399_Tempco_{date}.csv",    # {date} will later be replaced by the current date in isoformat
         description=(
         "This file contains voltage measurements accross a 100 Ω shunt resistor driven by the"
-        "digital current driver."
+        " digital current driver."
         ), logging_devices=devices, time_interval=1
     )
 
