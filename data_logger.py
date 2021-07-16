@@ -398,9 +398,11 @@ class LoggingDaemon():
         for sig in signals:
             asyncio.get_running_loop().add_signal_handler(
                 sig, lambda: asyncio.create_task(self.shutdown()))
-
-        await self.__init_daemon()
-        await self.__main_loop()
+        try:
+            await self.__init_daemon()
+            await self.__main_loop()
+        except asyncio.CancelledError:
+            self.__logger.info('Logging daemon shut down.')
 
 # Report all mistakes managing asynchronous resources.
 warnings.simplefilter('always', ResourceWarning)
