@@ -231,11 +231,17 @@ class LoggingDaemon():
 
         # Connect to all loggers
         coros = [device.connect() for device in self.__devices.values()]
-        await asyncio.gather(*coros)
+        results = await asyncio.gather(*coros, return_exceptions=True)
+        for result in results:
+            if isinstance(result, Exception):
+                raise result
 
         self.__logger.info("Initializing devices")
         coros = [device.initialize() for device in self.__devices.values()]
-        await asyncio.gather(*coros)
+        results = await asyncio.gather(*coros, return_exceptions=True)
+        for result in results:
+            if isinstance(result, Exception):
+                raise result
 
         # Open file, buffering=1 means line buffering
         self.__filehandle = await aiofiles.open(self.__filename, mode='a+', buffering=1)
