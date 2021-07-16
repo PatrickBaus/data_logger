@@ -491,13 +491,13 @@ KS34470A_INIT_COMMANDS = [
     "SENSE:VOLTAGE:IMPEDANCE:AUTO ON",
 ]
 
-#fluke1524 = Fluke1524(AsyncSerial("/dev/ttyUSB1", timeout=0.5, baudrate=9600))
+fluke1524 = Fluke1524(AsyncSerial("/dev/ttyUSB1", timeout=0.5, baudrate=9600))
 #ee07 = EE07(AsyncSerial("/dev/ttyACM0", timeout=0.5, baudrate=115200))
 #ldt5948 = LDT5948(AsyncSerial("/dev/ttyUSB0", timeout=0.5, baudrate=115200))
 
 #devices["KS34470A"] = Keysight34470ALogger(ks34470a, device_name="KS34470A", column_names=["Value KS34470A",], initial_commands=KS34470A_INIT_COMMANDS)
 devices["HP3458A"] = HP3458ALogger(hp3458a, device_name="3458A", column_names=["Value HP3458A",], initial_commands=HP3458A_INIT_COMMANDS)
-#devices["Fluke1524"] = Fluke1524Logger(fluke1524, device_name="temperature",column_names=["Temperature 10k Thermistor", "Temperature PT100"])
+devices["Fluke1524"] = Fluke1524Logger(fluke1524, device_name="temperature",column_names=["Temperature 10k Thermistor", "Temperature PT100"])
 devices["humidity_bricklet"] = TinkerforgeLogger(bricklet, device_name="humidity", column_names=["Humidity (Ambient)",])
 #devices["EE07"] = EE07Logger(ee07, device_name="EE07 humidity probe", column_names=["Humidity (DUT)", "Temperature humidity sensor (DUT)"])
 #devices["DMM6500"] = GenericLogger(dmm6500, device_name="DMM6500", column_names=["Value DMM6500",], initial_commands=DMM6500_INIT_COMMANDS)
