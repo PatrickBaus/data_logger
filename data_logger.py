@@ -227,7 +227,7 @@ class LoggingDaemon():
         self.__filehandle = None
 
     async def __init_daemon(self):
-        self.__logger.debug('Initializing Logging daemon')
+        self.__logger.debug('Initializing Logging daemon.')
 
         # Connect to all loggers
         coros = [device.connect() for device in self.__devices.values()]
@@ -355,44 +355,41 @@ class LoggingDaemon():
             await ldt_5948.set_temperature_setpoint(temperature_ramp[0][1])    # seed the ramp
             temperature_setpoint = float(await ldt_5948.get_temperature_setpoint())
             temperature_ramp.rotate(-1)
-            self.__logger.info("Starting temperature cycle at: %.3f °C", temperature_setpoint)
+            self.__logger.info("Starting temperature cycle at: %.3f °C.", temperature_setpoint)
 
             if not await ldt_5948.is_enabled():
                 await ldt_5948.set_enabled(True)
 
-        try:
-            while 'loop not canceled':
-                # Read packets and process them.
-                try:
-                    timestamp, data = await self.__read_packet(self.__time_interval)
-                    if data is not None:
-                        self.__logger.info(data)
-                        await self.__write_data_to_file(timestamp=timestamp, data=data)
-                        await self.__post_read(timestamp=timestamp, data=data)
+        while 'loop not canceled':
+            # Read packets and process them.
+            try:
+                timestamp, data = await self.__read_packet(self.__time_interval)
+                if data is not None:
+                    self.__logger.info(data)
+                    await self.__write_data_to_file(timestamp=timestamp, data=data)
+                    await self.__post_read(timestamp=timestamp, data=data)
 
-                        if temperature_ramp is not None and (timestamp-start_time).total_seconds() >= temperature_ramp[-1][0]:
-                            current_temperature = float(await self.__devices["LDT5948"].device.read_temperature())
-                            temperature_setpoint = float(await self.__devices["LDT5948"].device.get_temperature_setpoint())
+                    if temperature_ramp is not None and (timestamp-start_time).total_seconds() >= temperature_ramp[-1][0]:
+                        current_temperature = float(await self.__devices["LDT5948"].device.read_temperature())
+                        temperature_setpoint = float(await self.__devices["LDT5948"].device.get_temperature_setpoint())
 
-                            if abs(current_temperature - temperature_setpoint) <= 0.1:
-                                self.__logger.info("Setting temperature to: %.3f °C", temperature_ramp[0][1])
-                                await self.__devices["LDT5948"].device.set_temperature_setpoint(temperature_ramp[0][1])
-                                temperature_ramp.rotate(-1)
-                                start_time = timestamp
-                            else:
-                                self.__logger.warning((
-                                    "Temperature has not settled yet. Delaying next step."
-                                    "Temperature setpoint: %.3f °C, current temperature: %.3f °C,"
-                                    "Required delta: 100 mK."),
-                                    temperature_setpoint, current_temperature
-                                )
-                except ValueError as exc:
-                    self.__logger.error(exc)
-
-        except asyncio.CancelledError:
-            self.__logger.info('DgTemp daemon serial connection closed')
-        except Exception as exc:
-            self.__logger.exception("Error while running main_loop")
+                        if abs(current_temperature - temperature_setpoint) <= 0.1:
+                            self.__logger.info("Setting temperature to: %.3f °C", temperature_ramp[0][1])
+                            await self.__devices["LDT5948"].device.set_temperature_setpoint(temperature_ramp[0][1])
+                            temperature_ramp.rotate(-1)
+                            start_time = timestamp
+                        else:
+                            self.__logger.warning((
+                                "Temperature has not settled yet. Delaying next step."
+                                "Temperature setpoint: %.3f °C, current temperature: %.3f °C,"
+                                "Required delta: 100 mK."),
+                                temperature_setpoint, current_temperature
+                            )
+            except ValueError as exc:
+                self.__logger.error(exc)
+            except Exception:
+                self.__logger.exception("Error while running main_loop.")
+                break
 
     async def run(self):
         # Catch signals and shutdown
