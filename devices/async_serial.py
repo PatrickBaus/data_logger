@@ -46,20 +46,17 @@ class AsyncSerial:
 
     async def read(self, length=None):
         if self.is_connected:
-            try:
-                async with timeout(self.__timeout) as context_manager:
-                    async with self.__lock:
-                        if length is None:
-                            # Read until the separator
-                            data = await self.__reader.readuntil(self.__separator)
-                        else:
-                            # read $length bytes
-                            data = await self.__reader.readexactly(length)
-                    return data.decode("utf-8")
-            except asyncio.CancelledError:
-                if context_manager.expired:
-                    raise asyncio.TimeoutError() from None
-                raise
+            if length is None:
+                data = await asyncio.wait_for(
+                    self.__reader.readuntil(self.__separator),
+                    timeout=self.__timeout
+                )
+            else:
+                data = await asyncio.wait_for(
+                    self.__reader.readexactly(length),
+                    timeout=self.__timeout
+                )
+            return data.decode("utf-8")
         else:
             # TODO: raise custom error
             pass
@@ -76,7 +73,7 @@ class AsyncSerial:
         if not self.is_connected:
             self.__lock = asyncio.Lock()
             self.__reader, self.__writer = await asyncio.wait_for(
-                await serial_asyncio.open_serial_connection(url=self.__tty, **self.__kwargs),
+                serial_asyncio.open_serial_connection(url=self.__tty, **self.__kwargs),
                 timeout=self.__timeout
             )
 
