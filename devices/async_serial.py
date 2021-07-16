@@ -76,10 +76,7 @@ class AsyncSerial:
         if not self.is_connected:
             self.__lock = asyncio.Lock()
             self.__reader, self.__writer = await asyncio.wait_for(
-                self.__reader, self.__writer = await serial_asyncio.open_serial_connection(
-                    url=self.__tty,
-                    **self.__kwargs
-                ),
+                await serial_asyncio.open_serial_connection(url=self.__tty, **self.__kwargs),
                 timeout=self.__timeout
             )
 
