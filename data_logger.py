@@ -264,20 +264,17 @@ class LoggingDaemon():
         await self.__filehandle.write(f"# {','.join(column_names)}\n")
 
     async def shutdown(self):
-        # Get all running tasks
+        self.__logger.debug("Disconnecting devices.")
+        coros = [device.disconnect() for device in self.__devices.values()]
+        await asyncio.gather(*coros)
+
+        # Get all remaining running tasks
         tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
         # and stop them
         for task in tasks:
             task.cancel()
         try:
             await asyncio.gather(*tasks)
-        except asyncio.CancelledError:
-            pass
-
-        self.__logger.debug("Disconnecting devices.")
-        coros = [device.disconnect() for device in self.__devices.values()]
-        try:
-            await asyncio.gather(*coros)
         except asyncio.CancelledError:
             pass
 
