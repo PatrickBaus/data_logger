@@ -28,7 +28,7 @@ import struct
 import warnings
 
 import aiofiles
-import async_timeout
+from async_timeout import timeout
 import numpy as np
 from tinkerforge_async.ip_connection import IPConnectionAsync, NotConnectedError
 from tinkerforge_async.ip_connection_helper import base58decode
@@ -76,8 +76,7 @@ class LoggingDevice():
         Execute coros in order with a timeout
         """
         for coro in coros:
-            with async_timeout.timeout(timeout):
-                await coro
+            await asyncio.wait_for(coro, timeout=timeout)
 
     async def connect(self):
         await self.__device.connect()
@@ -285,7 +284,7 @@ class LoggingDaemon():
 
     async def __read_packet(self, time_interval):
         try:
-            with async_timeout.timeout(self.timeout):
+            async with timeout(self.timeout):
                 coros = [device.read() for device in self.__devices.values()]
                 # Wait for the slowest device or at least {time_interval}
                 coros.append(asyncio.sleep(time_interval))
