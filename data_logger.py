@@ -32,7 +32,8 @@ from async_timeout import timeout
 import numpy as np
 from tinkerforge_async.ip_connection import IPConnectionAsync, NotConnectedError
 from tinkerforge_async.ip_connection_helper import base58decode
-from tinkerforge_async.bricklet_humidity_v2 import BrickletHumidityV2 as BrickletHumidity
+from tinkerforge_async.bricklet_humidity_v2 import BrickletHumidityV2
+from tinkerforge_async.bricklet_humidity import BrickletHumidity
 # Devices
 from async_gpib.async_gpib import AsyncGpib
 from devices.async_serial import AsyncSerial
@@ -408,12 +409,14 @@ logging.basicConfig(level=LOG_LEVEL)
 devices = {}    # If using Python < 3.7 use an ordered dict to ensure insertion order
 # The output file will have the same column order as the `devices` (ordered) dict
 
-ipcon = IPConnectionAsync(host='10.0.0.5')
-bricklet = BrickletHumidity(base58decode("Dm6"), ipcon) # Create tinkerforge sensor device
+ipcon = IPConnectionAsync(host='192.168.2.81')
+#ipcon = IPConnectionAsync(host='10.0.0.5')
+bricklet = BrickletHumidity(base58decode("eDj"), ipcon) # Create tinkerforge sensor device
+#bricklet = BrickletHumidityV2(base58decode("Dm6"), ipcon) # Create tinkerforge sensor device
 
 # 5 second timeout as 10*10 PLC with AZERO takes about 4 seconds
-#gpib_device = AsyncGpib(name=0, pad=22, timeout=5*1000)
-#hp3458a = Hp3458A(connection=gpib_device)
+gpib_device = AsyncGpib(name=0, pad=22, timeout=5*1000)
+hp3458a = Hp3458A(connection=gpib_device)
 HP3458A_INIT_COMMANDS = [
     "BEEP",
 #    "RESET",
@@ -432,8 +435,8 @@ HP3458A_INIT_COMMANDS = [
 ]
 
 # 5 second timeout as 6*10 PLC with AZERO takes about 3.5 seconds
-#gpib_device = AsyncGpib(name=0, pad=16, timeout=5*1000)
-#k2002 = Keithley2002(connection=gpib_device)
+gpib_device = AsyncGpib(name=0, pad=16, timeout=5*1000)
+k2002 = Keithley2002(connection=gpib_device)
 K2002_INIT_COMMANDS = [
     "*RST",
     "*CLS",
@@ -482,25 +485,24 @@ KS34470A_INIT_COMMANDS = [
     "SENSE:VOLTAGE:IMPEDANCE:AUTO ON",
 ]
 
-fluke1524 = Fluke1524(AsyncSerial("/dev/ttyUSB1", timeout=0.5, baudrate=9600))
+#fluke1524 = Fluke1524(AsyncSerial("/dev/ttyUSB1", timeout=0.5, baudrate=9600))
 #ee07 = EE07(AsyncSerial("/dev/ttyACM0", timeout=0.5, baudrate=115200))
 #ldt5948 = LDT5948(AsyncSerial("/dev/ttyUSB0", timeout=0.5, baudrate=115200))
 
-#devices["KS34470A"] = Keysight_34470A_Logger(ks34470a, device_name="KS34470A", column_names=["Value KS34470A",], initial_commands=KS34470A_INIT_COMMANDS)
-#devices["HP3458A"] = HP_3458A_Logger(hp3458a, device_name="3458A", column_names=["Value HP3458A",], initial_commands=HP3458A_INIT_COMMANDS)
-#devices["Fluke1524"] = Fluke_1524_Logger(fluke1524, device_name="temperature",column_names=["Temperature 10k Thermistor", "Temperature PT100"])
+#devices["KS34470A"] = Keysight34470ALogger(ks34470a, device_name="KS34470A", column_names=["Value KS34470A",], initial_commands=KS34470A_INIT_COMMANDS)
+devices["HP3458A"] = HP3458ALogger(hp3458a, device_name="3458A", column_names=["Value HP3458A",], initial_commands=HP3458A_INIT_COMMANDS)
+#devices["Fluke1524"] = Fluke1524Logger(fluke1524, device_name="temperature",column_names=["Temperature 10k Thermistor", "Temperature PT100"])
 devices["humidity_bricklet"] = TinkerforgeLogger(bricklet, device_name="humidity", column_names=["Humidity (Ambient)",])
-#devices["EE07"] = EE07_Logger(ee07, device_name="EE07 humidity probe", column_names=["Humidity (DUT)", "Temperature humidity sensor (DUT)"])
+#devices["EE07"] = EE07Logger(ee07, device_name="EE07 humidity probe", column_names=["Humidity (DUT)", "Temperature humidity sensor (DUT)"])
 #devices["DMM6500"] = GenericLogger(dmm6500, device_name="DMM6500", column_names=["Value DMM6500",], initial_commands=DMM6500_INIT_COMMANDS)
-#devices["K2002"] = Keithley_2002_Logger(k2002, device_name="K2002", column_names=["Value K2002",], initial_commands=K2002_INIT_COMMANDS, post_read_commands=K2002_POST_READ_COMMANDS)
-#devices["LDT5948"] = LDT_5948_Logger(ldt5948, device_name="ILX temperature controller", column_names=["Temperature in loop", "TEC current", "TEC voltage", "Temperature setpoint"])
+devices["K2002"] = Keithley2002Logger(k2002, device_name="K2002", column_names=["Value K2002",], initial_commands=K2002_INIT_COMMANDS, post_read_commands=K2002_POST_READ_COMMANDS)
+#devices["LDT5948"] = LDT5948Logger(ldt5948, device_name="ILX temperature controller", column_names=["Temperature in loop", "TEC current", "TEC voltage", "Temperature setpoint"])
 
 try:
     logging_daemon = LoggingDaemon(
-        filename="LM399_Tempco_{date}.csv",    # {date} will later be replaced by the current date in isoformat
+        filename="../data/LM399_Tempco_{date}.csv",    # {date} will later be replaced by the current date in isoformat
         description=(
-        "This file contains voltage measurements accross a 100 Ω shunt resistor driven by the"
-        " digital current driver."
+        "This file contains voltage measurements of the Fluke 5440B @10 V vs the HP3458A and K2002 DMM."
         ), logging_devices=devices, time_interval=1
     )
 
