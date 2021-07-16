@@ -23,6 +23,7 @@ import serial_asyncio
 class Fluke1524():
     def __init__(self, conn):
         self.__conn = conn
+        self.__conn.separator = b'\r'
         self.__lock = None
 
     async def read(self):
@@ -41,6 +42,7 @@ class Fluke1524():
     async def connect(self):
         await self.__conn.connect()
         self.__lock = asyncio.Lock()
+        self.write("")    # Flush input buffer of the device
         try:
             await asyncio.wait_for(self.read(), timeout=0.1)    # 100ms timeout
         except asyncio.TimeoutError:
@@ -48,60 +50,6 @@ class Fluke1524():
 
     async def disconnect(self):
         await self.__conn.disconnect()
-
-    async def read_sensor1(self):
-        return await self.query("READ? 1")
-
-    async def read_sensor2(self):
-        return await self.query("READ? 2")
-
-    async def get_id(self):
-        return await self.query("*IDN?")
-
-class Fluke_1524():
-    def __init__(self, tty, separator=b'\r', loop=None):
-        self.__loop = asyncio.get_event_loop() if loop is None else loop
-
-        self.__tty = tty
-        self.__separator = separator
-
-        self.__lock = None
-        self.__reader, self.__writer = None, None
-
-    async def read(self):
-        # Read until separator, then strip it and return as UTF-8
-        return (await self.__reader.readuntil(self.__separator))[:-1].decode("utf-8")
-
-    def write(self, cmd):
-        self.__writer.write((cmd + "\r\n").encode())
-
-    async def connect(self):
-        self.__lock = asyncio.Lock()
-        self.__reader, self.__writer = await serial_asyncio.open_serial_connection(url=self.__tty, loop=self.__loop)
-        self.__writer.transport.serial.reset_input_buffer()
-        self.__writer.write("\r\n".encode())    # Flush input buffer of the device
-        try:
-            await asyncio.wait_for(self.read(), timeout=0.1)    # 100ms timeout
-        except asyncio.TimeoutError:
-            pass
-
-    async def disconnect(self):
-        # Flush data
-        if self.__reader is not None:
-            self.__reader._transport.close()
-            self.__reader = None
-        if self.__writer is not None:
-            try:
-                await self.__writer.drain()
-            except ConnectionResetError:
-                pass
-            #self.__writer.write_eof()  # Not supported by serial connections
-            self.__writer = None
-
-    async def query(self, cmd):
-        async with self.__lock:
-            self.write(cmd)
-            return await self.read()
 
     async def read_sensor1(self):
         return await self.query("READ? 1")
