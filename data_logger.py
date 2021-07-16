@@ -506,7 +506,7 @@ devices["K2002"] = Keithley2002Logger(k2002, device_name="K2002", column_names=[
 
 try:
     logging_daemon = LoggingDaemon(
-        filename="../data/LM399_Tempco_{date}.csv",    # {date} will later be replaced by the current date in isoformat
+        filename="../data/Fluke_5440B_drift_test_{date}.csv",    # {date} will later be replaced by the current date in isoformat
         description=(
         "This file contains voltage measurements of the Fluke 5440B @10 V vs the HP3458A and K2002 DMM."
         ), logging_devices=devices, time_interval=1
