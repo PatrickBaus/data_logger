@@ -61,7 +61,7 @@ class Hp3458A():
     async def get_cal7v(self):
         return await self.query("CAL? 2")
 
-    async def get_cal40v(self):
+    async def get_cal40k(self):
         return await self.query("CAL? 1")
 
     async def get_temperature_acal_dcv(self):
@@ -95,7 +95,7 @@ class Keysight34470A():
         await self.__writer.drain()
 
     async def __read(self):
-        return (await self.__reader.readuntil(b"\n"))[:-1].decode("utf-8")
+        return (await self.__reader.readuntil(b'\n'))[:-1].decode("utf-8")
 
     async def query(self, cmd):
         await self.write(cmd)

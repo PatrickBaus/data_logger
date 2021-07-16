@@ -116,9 +116,9 @@ class GenericLogger(LoggingDevice):
 
 class HP3458ALogger(GenericLogger):
     async def get_log_header(self):
-        cal_const71 = await self.device.get_acal1V()
-        cal_const72 = await self.device.get_acal10V()
-        cal_7v = await self.device.get_cal7V()
+        cal_const71 = await self.device.get_acal1v()
+        cal_const72 = await self.device.get_acal10v()
+        cal_7v = await self.device.get_cal7v()
         cal_40k = await self.device.get_cal40k()
         temperature_acal_dcv = await self.device.get_temperature_acal_dcv()
 
@@ -155,7 +155,7 @@ class LDT5948Logger(LoggingDevice):
 class Keithley2002Logger(LoggingDevice):
     async def read(self):
         await super().read()
-        data = await self.device.query("FETCH?", len=8)  # get an 8 byte double from the instrument
+        data = await self.device.query("FETCH?", length=8)  # get an 8 byte double from the instrument
         data, = struct.unpack('d', data)
         return (str(data), )
 

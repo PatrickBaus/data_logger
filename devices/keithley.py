@@ -84,7 +84,7 @@ class Keithley2002():
         if length is None:  # pylint: disable=no-else-return
             return (await self.__conn.read()).strip().decode("utf-8")
         else:
-            return (await self.__conn.read(length=length+1))[:-1]
+            return (await self.__conn.read(len=length+1))[:-1]
 
     async def query(self, cmd, length=None):
         await self.write(cmd)

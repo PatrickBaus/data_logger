@@ -36,7 +36,7 @@ class AsyncSerial:
     def is_connected(self):
         return self.__writer is not None and not self.__writer.is_closing()
 
-    def __init__(self, tty, separator=b"\n", timeout=None, **kwargs):
+    def __init__(self, tty, separator=b'\n', timeout=None, **kwargs):
         self.__tty = tty
         self.__separator = separator
         self.__lock = None
@@ -97,7 +97,7 @@ class AsyncSerial:
                     raise
 
             self.__writer.transport.serial.reset_input_buffer()
-            self.__logger.info('Serial connection established')
+            self.__logger.info("Serial connection established")
 
     async def disconnect(self):
         if self.is_connected:
@@ -111,4 +111,4 @@ class AsyncSerial:
             finally:
                 # We guarantee, that the connection is removed
                 self.__writer, self.__reader = None, None
-                self.__logger.info('Serial connection closed')
+                self.__logger.info("Serial connection closed")
