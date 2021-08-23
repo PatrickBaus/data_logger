@@ -68,7 +68,7 @@ class AsyncEthernet:
                 asyncio.open_connection(host=host, port=port, **self.__kwargs),
                 timeout=self.__timeout
             )
-            self.__logger.info('Ethernet connection established')
+            self.__logger.info("Ethernet connection established to '%s:%d'", host, port)
 
     async def disconnect(self):
         if self.is_connected:
@@ -82,4 +82,4 @@ class AsyncEthernet:
             finally:
                 # We guarantee, that the connection is removed
                 self.__writer, self.__reader = None, None
-                self.__logger.info('Ethernet connection closed')
+                self.__logger.info("Ethernet connection disconnected from '%s:%d'", *self.__hostname)
