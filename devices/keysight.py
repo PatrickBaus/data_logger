@@ -75,27 +75,33 @@ class Hp3458A():
         await self.__conn.disconnect()
 
 class Keysight34470A():
-    def __init__(self, ip, port=5025, loop=None):
+    def __init__(self, connection, loop=None):
         self.__loop = asyncio.get_event_loop() if loop is None else loop
 
-        self.__ip = ip
-        self.__port = port
+        self.__conn = connection
 
         self.__reader, self.__writer = None, None
 
     async def connect(self):
-        with async_timeout.timeout(1):  # 1s timeout
-            self.__reader, self.__writer = await asyncio.open_connection(self.__ip, self.__port, loop=self.__loop)
+        await self.__conn.connect()
+        try:
+            with async_timeout.timeout(0.5):    # 100ms timeout
+                await self.read()
+        except asyncio.TimeoutError:
+            pass
 
     async def disconnect(self):
-        self.__writer.close()
+        await self.__conn.disconnect()
 
     async def write(self, cmd):
-        self.__writer.write((cmd + "\n").encode())
-        await self.__writer.drain()
+        await self.__conn.write(cmd + "\n")
 
-    async def __read(self):
-        return (await self.__reader.readuntil(b'\n'))[:-1].decode("utf-8")
+    async def __read(self, length=None):
+        # Strip the separator "\n"
+        if length is None: # pylint: disable=no-else-return
+            return (await self.__conn.read())[:-1]
+        else:
+            return (await self.__conn.read(len=len+1))[:-1]
 
     async def query(self, cmd):
         await self.write(cmd)
@@ -118,6 +124,9 @@ class Keysight34470A():
 
     async def set_mode_resistance_2w(self):
         await self.write("SENS:FUNC 'RES'")
+
+    async def set_mode_resistance_4w(self):
+        await self.write("SENS:FUNC 'FRES'")
 
     async def set_nplc(self, nplc):
         await self.write("SENS:RES:NPLC {nplc}".format(nplc=nplc))
