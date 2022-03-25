@@ -19,6 +19,7 @@
 
 import asyncio
 import async_timeout
+import logging
 
 class KeithleyDMM6500():
     def __init__(self, connection):
@@ -43,7 +44,7 @@ class KeithleyDMM6500():
         if length is None: # pylint: disable=no-else-return
             return (await self.__conn.read())[:-1].decode("utf-8")
         else:
-            return (await self.__conn.read(len=len+1))[:-1]
+            return (await self.__conn.read(length=length+1))[:-1]
 
     async def query(self, cmd, length=None):
         await self.write(cmd)
@@ -70,25 +71,46 @@ class KeithleyDMM6500():
 class Keithley2002():
     def __init__(self, connection):
         self.__conn = connection
+        self.__logger = logging.getLogger(__name__)
 
     async def get_id(self):
         # Catch AttributeError if not connected
-        await self.write("*IDN?")
+        await self.write("*IDN?", test_error=False)
         return await self.read()
 
-    async def write(self, cmd):
+    async def wait_for_data(self):
+        try:
+            await self.__conn.wait((1 << 11) | (1<<14))    # Wait for RQS or TIMO
+        except asyncio.TimeoutError:
+            self.__logger.warning("Timeout during wait. Is the IbaAUTOPOLL(0x7) bit set for the board? Or the timeout set too low?")
+            raise
+
+    async def write(self, cmd, test_error=False):
         await self.__conn.write((cmd + "\n").encode("ascii"))
+        if cmd.lower() == "*opc?":
+            await self.read()
+        elif test_error and not cmd.startswith("*"):
+            await self.__conn.write((":SYSTem:ERRor?" + "\n").encode("ascii"))
+            print(await self.read())
 
     async def read(self, length=None):
         # if length is set, return the bytes untouched
         if length is None:  # pylint: disable=no-else-return
             return (await self.__conn.read()).strip().decode("utf-8")
         else:
-            return (await self.__conn.read(len=length+1))[:-1]
+            return (await self.__conn.read(length=length+1))[:-1]
 
     async def query(self, cmd, length=None):
-        await self.write(cmd)
-        return await self.read(length)
+        await self.write(cmd, test_error=False)
+        try:
+            result = await self.read(length)
+            return result
+        except Exception:
+            import traceback
+            traceback.print_exc()
+
+    async def serial_poll(self):
+        return await self.__conn.serial_poll()
 
     async def connect(self):
         await self.__conn.connect()
