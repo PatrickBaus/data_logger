@@ -34,7 +34,7 @@ class AsyncEthernet:
         return self.__writer is not None and not self.__writer.is_closing()
 
     def __init__(self, host, port, separator=b'\n', timeout=None, **kwargs):
-        self.__hostname = host, port
+        self.__host = host, port
         self.__separator = separator
         self.__kwargs = kwargs
         self.__timeout = 0.1 if timeout is None else timeout # in seconds
@@ -63,7 +63,7 @@ class AsyncEthernet:
 
     async def connect(self):
         if not self.is_connected:
-            host, port = self.__hostname
+            host, port = self.__host
             self.__reader, self.__writer = await asyncio.wait_for(
                 asyncio.open_connection(host=host, port=port, **self.__kwargs),
                 timeout=self.__timeout
