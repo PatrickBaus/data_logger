@@ -77,7 +77,7 @@ class Mqttwriter:
                         else:
                             for topic, payload in payloads:
                                 pass
-                                self.__logger.info("Going to publish: %s to %s", payload, topic)
+                                #self.__logger.info("Going to publish: %s to %s", payload, topic)
                                 await mqtt_client.publish(topic, payload=payload, qos=2)
                             item = None  # Get a new event to publish
                             self.__write_queue.task_done()

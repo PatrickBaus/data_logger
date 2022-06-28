@@ -2,7 +2,7 @@ endpoints:
     file: {filename: 'data/LM399_popcorn_noise_test_{date}.csv', descriptor: "This file contains voltages of 10 LM399/ADR1399 references which are scanned using a K2002 and a SCAN2000 SSR card."}
     mqtt: {host: hal43.apq, port: 1883}
 devices:
-    - {uuid: 772ca54f-f1f1-48c3-bf6e-104ae64c1c2d, driver: tinkerforge, host: 192.168.2.81, uid: eDj, device_name: humidity, column_names: [Humidity (TF),], base_topic: "sensors/room_011/LM399/tinkforge"}
+    - {uuid: 772ca54f-f1f1-48c3-bf6e-104ae64c1c2d, driver: tinkerforge, host: 192.168.2.81, uid: eDj, device_name: humidity, column_names: [Humidity (TF),], base_topic: "sensors/room_011/LM399/tinkerforge"}
     - {uuid: 15d9f44c-03b4-465b-b596-4cb623d57199, driver: k2002_scanner, name: 0, pad: 16, timeout: 100, device_name: K2002,
        initial_commands: [
            "*CLS",
