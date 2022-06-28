@@ -229,7 +229,7 @@ class Keithley2002Logger(LoggingDevice):
         await self.device.write(f":rout:clos (@{channel+1})")
         data = await self.device.query("FETCH?", length=8)
         data = struct.unpack('d', data)[0]      # The result of unpack is always a tuple
-        return DataEvent(sender=self.uuid, sid=channel, topic=self.base_topic + f"/channel{channel}", value=data, unit='V')
+        return DataEvent(sender=self.uuid, sid=channel, topic=self.base_topic + f"/channel{channel+1}", value=data, unit='V')
 
     async def read(self):
         await super().read()
