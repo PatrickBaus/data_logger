@@ -18,7 +18,7 @@ devices:
            ":ROUTE:SCAN:LSEL INT",  # Enable the internal scanner card
        ],
        post_read_commands: [],
-       active_channels: [1,2,3,4,5,6,7,8,9,10],
+       active_channels: [0,1,2,3,4,5,6,7,8,9],
        base_topic: "sensors/room_011/LM399/k2002"
       }
     - {uuid: 7ea1048c-eaad-42cf-aff9-ab69c69eb0ee, driver: ee07, tty: "/dev/ttyACM0", timeout: 0.5, baudrate: 115200, device_name: "EE07 humidity probe", column_names: ["Humidity (Ambient)", "Temperature humidity sensor (Ambient)"], base_topic: "sensors/room_011/LM399/ee07"}

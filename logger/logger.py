@@ -202,8 +202,8 @@ class LDT5948Logger(LoggingDevice):
         return (
             DataEvent(sender=self.uuid, sid=0, topic=self.base_topic + "/temperature", value=temperature, unit='°C'),
             DataEvent(sender=self.uuid, sid=1, topic=self.base_topic + "/tec_current", value=current, unit='A'),
-            DataEvent(sender=self.uuid, sid=1, topic=self.base_topic + "/tec_voltage", value=voltage, unit='V'),
-            DataEvent(sender=self.uuid, sid=1, topic=self.base_topic + "/setpoint", value=setpoint, unit='°C')
+            DataEvent(sender=self.uuid, sid=2, topic=self.base_topic + "/tec_voltage", value=voltage, unit='V'),
+            DataEvent(sender=self.uuid, sid=3, topic=self.base_topic + "/setpoint", value=setpoint, unit='°C')
         )
 
 
