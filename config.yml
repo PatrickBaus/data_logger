@@ -22,5 +22,5 @@ devices:
        base_topic: "sensors/room_011/LM399"
       }
     - {uuid: 7ea1048c-eaad-42cf-aff9-ab69c69eb0ee, driver: ee07, tty: "/dev/ttyACM0", timeout: 0.5, baudrate: 115200, device_name: "EE07 humidity probe", column_names: ["Humidity (Ambient)", "Temperature humidity sensor (Ambient)"], base_topic: "sensors/room_011/LM399"}
-    - {uuid: 803045a8-1c74-4e02-b9b7-232f3ad77be7, driver: fluke1524, tty: "dev/ttyUSB1", timeout: 1, baudrate: 9600, device_name: "temperature", column_names: ["Temperature 10k Thermistor (PCB)", "Temperature PT100 (Room)"], base_topic: "sensors/room_011/LM399o"}
-    - {uuid: c9e5e997-6db6-42ec-90ea-70052a091ea0, driver: ldt5948, tty: "dev/ttyUSB0", timeout: 0.5, baudrate: 115200, device_name: "ILX temperature controller", column_names: ["Temperature in loop", "TEC current", "TEC voltage", "Temperature setpoint"], base_topic: "sensors/room_011/LM399"}
+    - {uuid: 803045a8-1c74-4e02-b9b7-232f3ad77be7, driver: fluke1524, tty: "/dev/ttyUSB1", timeout: 1, baudrate: 9600, device_name: "temperature", column_names: ["Temperature 10k Thermistor (PCB)", "Temperature PT100 (Room)"], base_topic: "sensors/room_011/LM399o"}
+    - {uuid: c9e5e997-6db6-42ec-90ea-70052a091ea0, driver: ldt5948, tty: "/dev/ttyUSB0", timeout: 0.5, baudrate: 115200, device_name: "ILX temperature controller", column_names: ["Temperature in loop", "TEC current", "TEC voltage", "Temperature setpoint"], base_topic: "sensors/room_011/LM399"}
