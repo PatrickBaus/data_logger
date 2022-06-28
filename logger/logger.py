@@ -16,9 +16,41 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # ##### END GPL LICENSE BLOCK #####
+from __future__ import annotations
 
 import asyncio
 import logging
+import struct
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from decimal import Decimal
+from typing import Any
+from uuid import UUID
+
+from tinkerforge_async import IPConnectionAsync, base58decode
+from tinkerforge_async.bricklet_humidity_v2 import BrickletHumidityV2
+
+
+@dataclass(frozen=True)
+class DataEvent:
+    """
+    The base class to encapsulate any data event.
+    """
+    timestamp: float = field(init=False)
+    sender: UUID
+    sid: int
+    topic: str
+    value: Any
+    unit: str
+
+    def __post_init__(self):
+        # A slightly clumsy approach to setting the timestamp property, because this is frozen. Taken from:
+        # https://docs.python.org/3/library/dataclasses.html#frozen-instances
+        object.__setattr__(self, 'timestamp', datetime.now(timezone.utc))
+
+    def __str__(self):
+        return str(self.value)
+
 
 class LoggingDevice():
     @property
@@ -34,16 +66,35 @@ class LoggingDevice():
     def device(self):
         return self.__device
 
-    def __init__(self, device, device_name=None, column_names=None, initial_commands=None,
-                 post_read_commands=None):
+    @property
+    def uuid(self) -> UUID:
+        return self.__uuid
+
+    @property
+    def base_topic(self) -> str:
+        return self.__base_topic
+
+    def __init__(
+            self,
+            device,
+            uuid: UUID,
+            name: str | None = None,
+            column_names=None,
+            initial_commands=None,
+            post_read_commands=None,
+            base_topic: str = None
+    ) -> None:
         self.__device = device
-        self.__device_name = device_name
-        self.__column_names = ["",] if column_names is None else column_names
+        self.__uuid = uuid
+        self.__device_name = name
+        self.__column_names = ["", ] if column_names is None else column_names
         self.__initial_commands = [] if initial_commands is None else initial_commands
         self.__post_read_commands = [] if post_read_commands is None else post_read_commands
+        self.__base_topic = base_topic
         self.__logger = logging.getLogger(__name__)
 
-    async def __batch_run(self, coros, timeout=1):
+    @staticmethod
+    async def __batch_run(coros, timeout=1):
         """
         Execute coros in order with a timeout
         """
@@ -83,7 +134,8 @@ class GenericLogger(LoggingDevice):
     async def read(self):
         await super().read()
         data = await self.device.read()
-        return (str(data), )
+
+        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=data, unit=''),)
 
 
 class HP3458ALogger(GenericLogger):
@@ -95,7 +147,7 @@ class HP3458ALogger(GenericLogger):
         temperature_acal_dcv = await self.device.get_temperature_acal_dcv()
 
         return (f"HP3458A ACAL constants CAL71="
-            f"{cal_const71}, CAL72={cal_const72}, TEMP={temperature_acal_dcv},"\
+            f"{cal_const71}, CAL72={cal_const72}, TEMP={temperature_acal_dcv},"
             f"7Vref={cal_7v}, 40kref={cal_40k}"
         )
 
@@ -115,40 +167,88 @@ class LDT5948Logger(LoggingDevice):
 
     async def read(self):
         await super().read()
+        setpoint: Decimal
         temperature, current, voltage, setpoint = await asyncio.gather(
             self.device.read_temperature(),
             self.device.read_current(),
             self.device.read_voltage(),
             self.device.get_temperature_setpoint()
         )
-        return str(temperature), str(current), str(voltage), f"{setpoint:.3f}"
+        setpoint = setpoint.quantize(Decimal("1.000"))
+
+        return (
+            DataEvent(sender=self.uuid, sid=0, topic=self.base_topic + "/temperature", value=temperature, unit='°C'),
+            DataEvent(sender=self.uuid, sid=1, topic=self.base_topic + "/tec_current", value=current, unit='A'),
+            DataEvent(sender=self.uuid, sid=1, topic=self.base_topic + "/tec_voltage", value=voltage, unit='V'),
+            DataEvent(sender=self.uuid, sid=1, topic=self.base_topic + "/setpoint", value=setpoint, unit='°C')
+        )
 
 
 class Keithley2002Logger(LoggingDevice):
+    async def query_channel(self, channel):
+        await self.device.write(f":rout:clos (@{channel+1})")
+        data = await self.device.query("FETCH?", length=8)
+        data = struct.unpack('d', data)[0]      # The result of unpack is always a tuple
+        return DataEvent(sender=self.uuid, sid=channel, topic=self.base_topic + f"/channel{channel}", value=data, unit='V')
+
     async def read(self):
         await super().read()
         data = await self.device.query("FETCH?", length=8)  # get an 8 byte double from the instrument
         data, = struct.unpack('d', data)
-        return (str(data), )
+        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=data, unit=''),)
+
+
+class Keithley2002ScannerLogger(Keithley2002Logger):
+    def __init__(
+            self,
+            active_channels: tuple[int],
+            *args,
+            **kwargs
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.__active_channels = active_channels
+
+    async def read(self):
+        return [await self.query_channel(channel) for channel in self.__active_channels]
 
 
 class TinkerforgeLogger(LoggingDevice):
+    @classmethod
+    @property
+    def driver(cls) -> str:
+        """
+        Returns
+        -------
+        str
+            The driver that identifies it to the factory
+        """
+        return "tinkerforge"
+
+    def __init__(self, host: str, uid: int | str, *args, **kwargs):
+        ipcon = IPConnectionAsync(host=host)
+        if isinstance(uid, int):
+            device = BrickletHumidityV2(uid, ipcon)
+        else:
+            device = BrickletHumidityV2(base58decode(uid), ipcon)
+        super().__init__(device=device, *args, **kwargs)
+
+
     # TODO: Rework TF api to be more general
     async def read(self):
         await super().read()
         try:
             value = await self.device.get_humidity()
-        except NotConnectedError as exc:
+        except ConnectionError as exc:
             try:
                 await self.device.connect()
             except Exception:
-                self.__logger.exception(
+                logging.getLogger(__name__).exception(
                     "Error during re-connect attempt to Tinkerforge Brick daemon."
                 )
             raise asyncio.TimeoutError(
                 "Connection to Tinkerforge bricklet timed out. Reconnecting."
             ) from exc
-        return (str(value), )
+        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=value, unit='%rH'),)
 
     async def get_id(self):
         return await self.device.get_identity()
@@ -162,7 +262,10 @@ class Fluke1524Logger(LoggingDevice):
             self.device.read_sensor1(),
             self.device.read_sensor2()
         )
-        return str(temperature1), str(temperature2)
+        return (
+            DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=temperature1, unit='°C'),
+            DataEvent(sender=self.uuid, sid=1, topic=self.base_topic, value=temperature2, unit='°C'),
+        )
 
 
 class EE07Logger(LoggingDevice):
@@ -170,10 +273,13 @@ class EE07Logger(LoggingDevice):
         await super().read()
         humidity = await self.device.read_sensor1()
         temperature = await self.device.read_sensor2()
-        return str(humidity), str(temperature)
+        return (
+            DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=humidity, unit='%rH'),
+            DataEvent(sender=self.uuid, sid=1, topic=self.base_topic, value=temperature, unit='°C'),
+        )
 
 class WavemasterLogger(LoggingDevice):
     async def read(self):
         await super().read()
         wavelength = await self.device.read_wavelength()
-        return (str(wavelength), )
+        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=wavelength, unit='nm'),)

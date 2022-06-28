@@ -75,9 +75,7 @@ class Hp3458A():
         await self.__conn.disconnect()
 
 class Keysight34470A():
-    def __init__(self, connection, loop=None):
-        self.__loop = asyncio.get_event_loop() if loop is None else loop
-
+    def __init__(self, connection):
         self.__conn = connection
 
         self.__reader, self.__writer = None, None

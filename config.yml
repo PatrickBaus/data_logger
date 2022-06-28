@@ -1,0 +1,5 @@
+endpoints:
+    file: {filename: 'data/wavelength_{date}.csv', descriptor: 'This file contains Wavelength measurements of a Coherent Wavemaster wavemeter'}
+    mqtt: {host: hal43.apq, port: 1883}
+devices:
+    - {uuid: 772ca54f-f1f1-48c3-bf6e-104ae64c1c2d, driver: tinkerforge, host: 192.168.1.164, uid: PTk, name: humidity, column_names: [Humidity (TF),], base_topic: "sensors/room_123/demo"}
