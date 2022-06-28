@@ -260,7 +260,7 @@ class Keithley2002ScannerLogger(Keithley2002Logger):
         self.__active_channels = active_channels
 
     async def read(self):
-        return tuple(await self.query_channel(channel) for channel in self.__active_channels)
+        return tuple((await self.query_channel(channel) for channel in self.__active_channels))
 
 
 class TinkerforgeLogger(LoggingDevice):
