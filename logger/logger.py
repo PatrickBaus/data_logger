@@ -299,7 +299,7 @@ class TinkerforgeLogger(LoggingDevice):
             raise asyncio.TimeoutError(
                 "Connection to Tinkerforge bricklet timed out. Reconnecting."
             ) from exc
-        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=value, unit='%rH'),)
+        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic + "/humidity", value=value, unit='%rH'),)
 
     async def get_id(self):
         return await self.device.get_identity()
@@ -330,8 +330,8 @@ class Fluke1524Logger(LoggingDevice):
             self.device.read_sensor2()
         )
         return (
-            DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=temperature1, unit='°C'),
-            DataEvent(sender=self.uuid, sid=1, topic=self.base_topic, value=temperature2, unit='°C'),
+            DataEvent(sender=self.uuid, sid=0, topic=self.base_topic + "/channel1", value=temperature1, unit='°C'),
+            DataEvent(sender=self.uuid, sid=1, topic=self.base_topic + "/channel2", value=temperature2, unit='°C'),
         )
 
 
@@ -357,8 +357,8 @@ class EE07Logger(LoggingDevice):
         humidity = await self.device.read_sensor1()
         temperature = await self.device.read_sensor2()
         return (
-            DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=humidity, unit='%rH'),
-            DataEvent(sender=self.uuid, sid=1, topic=self.base_topic, value=temperature, unit='°C'),
+            DataEvent(sender=self.uuid, sid=0, topic=self.base_topic + "/humidity", value=humidity, unit='%rH'),
+            DataEvent(sender=self.uuid, sid=1, topic=self.base_topic + "/temperature", value=temperature, unit='°C'),
         )
 
 class WavemasterLogger(LoggingDevice):
