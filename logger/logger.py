@@ -330,8 +330,8 @@ class Fluke1524Logger(LoggingDevice):
             self.device.read_sensor2()
         )
         return (
-            DataEvent(sender=self.uuid, sid=0, topic=self.base_topic + "temperature/channel1", value=temperature1, unit='°C'),
-            DataEvent(sender=self.uuid, sid=1, topic=self.base_topic + "temperature/channel2", value=temperature2, unit='°C'),
+            DataEvent(sender=self.uuid, sid=0, topic=self.base_topic + "/temperature/channel1", value=temperature1, unit='°C'),
+            DataEvent(sender=self.uuid, sid=1, topic=self.base_topic + "/temperature/channel2", value=temperature2, unit='°C'),
         )
 
 
