@@ -192,7 +192,6 @@ try:
         measurement_config = yaml.safe_load(file)
 
     devices = [device_factory.get(**device_config) for device_config in measurement_config.get('devices', [])]
-    print(devices)
 
     logging_daemon = LoggingDaemon(
         endpoints=measurement_config['endpoints'],
