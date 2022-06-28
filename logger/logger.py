@@ -329,9 +329,20 @@ class Fluke1524Logger(LoggingDevice):
             self.device.read_sensor1(),
             self.device.read_sensor2()
         )
-        return (
-            DataEvent(sender=self.uuid, sid=0, topic=self.base_topic + "/temperature/channel1", value=temperature1, unit='°C'),
-            DataEvent(sender=self.uuid, sid=1, topic=self.base_topic + "/temperature/channel2", value=temperature2, unit='°C'),
+        return (DataEvent(
+                sender=self.uuid,
+                sid=0,
+                topic=self.base_topic + "/temperature/channel1",
+                value=Decimal(temperature1),
+                unit='°C'
+            ),
+            DataEvent(
+                sender=self.uuid,
+                sid=1,
+                topic=self.base_topic + "/temperature/channel2",
+                value=Decimal(temperature2),
+                unit='°C'
+            ),
         )
 
 
@@ -354,11 +365,22 @@ class EE07Logger(LoggingDevice):
 
     async def read(self):
         await super().read()
-        humidity = await self.device.read_sensor1()
-        temperature = await self.device.read_sensor2()
+        humidity, temperature = await asyncio.gather(self.device.read_sensor1(), self.device.read_sensor2())
         return (
-            DataEvent(sender=self.uuid, sid=0, topic=self.base_topic + "/humidity", value=humidity, unit='%rH'),
-            DataEvent(sender=self.uuid, sid=1, topic=self.base_topic + "/temperature", value=temperature, unit='°C'),
+            DataEvent(
+                sender=self.uuid,
+                sid=0,
+                topic=self.base_topic + "/humidity",
+                value=Decimal(humidity),
+                unit='%rH'
+            ),
+            DataEvent(
+                sender=self.uuid,
+                sid=1,
+                topic=self.base_topic + "/temperature",
+                value=Decimal(temperature),
+                unit='°C'
+            ),
         )
 
 class WavemasterLogger(LoggingDevice):
