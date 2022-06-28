@@ -27,8 +27,15 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from async_gpib import AsyncGpib
 from tinkerforge_async import IPConnectionAsync, base58decode
 from tinkerforge_async.bricklet_humidity_v2 import BrickletHumidityV2
+
+from devices.async_serial import AsyncSerial
+from devices.e_plus_e import EE07
+from devices.fluke import Fluke1524
+from devices.ilx import LDT5948
+from devices.keithley import Keithley2002
 
 
 @dataclass(frozen=True)
@@ -78,7 +85,7 @@ class LoggingDevice():
             self,
             device,
             uuid: UUID,
-            name: str | None = None,
+            device_name: str | None = None,
             column_names=None,
             initial_commands=None,
             post_read_commands=None,
@@ -86,7 +93,7 @@ class LoggingDevice():
     ) -> None:
         self.__device = device
         self.__uuid = uuid
-        self.__device_name = name
+        self.__device_name = device_name
         self.__column_names = ["", ] if column_names is None else column_names
         self.__initial_commands = [] if initial_commands is None else initial_commands
         self.__post_read_commands = [] if post_read_commands is None else post_read_commands
@@ -160,6 +167,22 @@ class Keysight34470ALogger(GenericLogger):
 
 
 class LDT5948Logger(LoggingDevice):
+    @classmethod
+    @property
+    def driver(cls) -> str:
+        """
+        Returns
+        -------
+        str
+            The driver that identifies it to the factory
+        """
+        return "ldt5948"
+
+    def __init__(self, tty: str, timeout: int, baudrate: int, *args, **kwargs):
+        connection = AsyncSerial(tty=tty, timeout=timeout, baudrate=baudrate)
+        device = LDT5948(connection)
+        super().__init__(device=device, *args, **kwargs)
+
     async def get_log_header(self):
         kp, ki, kd = await self.device.get_pid_constants()  # pylint: disable=invalid-name
 
@@ -185,6 +208,23 @@ class LDT5948Logger(LoggingDevice):
 
 
 class Keithley2002Logger(LoggingDevice):
+    @classmethod
+    @property
+    def driver(cls) -> str:
+        """
+        Returns
+        -------
+        str
+            The driver that identifies it to the factory
+        """
+        return "k2002"
+
+    def __init__(self, name: int | str, pad: int, timeout, *args, **kwargs):
+        gpib_device = AsyncGpib(name=name, pad=pad, timeout=timeout)
+        device = Keithley2002(connection=gpib_device)
+
+        super().__init__(device=device, *args, **kwargs)
+
     async def query_channel(self, channel):
         await self.device.write(f":rout:clos (@{channel+1})")
         data = await self.device.query("FETCH?", length=8)
@@ -199,13 +239,24 @@ class Keithley2002Logger(LoggingDevice):
 
 
 class Keithley2002ScannerLogger(Keithley2002Logger):
+    @classmethod
+    @property
+    def driver(cls) -> str:
+        """
+        Returns
+        -------
+        str
+            The driver that identifies it to the factory
+        """
+        return "k2002_scanner"
+
     def __init__(
             self,
             active_channels: tuple[int],
             *args,
             **kwargs
     ) -> None:
-        super().__init__(*args, **kwargs)
+        super().__init__(column_names=[f"K2002 CH{channel+1}" for channel in active_channels], *args, **kwargs)
         self.__active_channels = active_channels
 
     async def read(self):
@@ -255,6 +306,22 @@ class TinkerforgeLogger(LoggingDevice):
 
 
 class Fluke1524Logger(LoggingDevice):
+    @classmethod
+    @property
+    def driver(cls) -> str:
+        """
+        Returns
+        -------
+        str
+            The driver that identifies it to the factory
+        """
+        return "fluke1524"
+
+    def __init__(self, tty: str, timeout: int, baudrate: int, *args, **kwargs):
+        connection = AsyncSerial(tty=tty, timeout=timeout, baudrate=baudrate)
+        device = Fluke1524(connection)
+        super().__init__(device=device, *args, **kwargs)
+
     # TODO: Rework API
     async def read(self):
         await super().read()
@@ -269,6 +336,22 @@ class Fluke1524Logger(LoggingDevice):
 
 
 class EE07Logger(LoggingDevice):
+    @classmethod
+    @property
+    def driver(cls) -> str:
+        """
+        Returns
+        -------
+        str
+            The driver that identifies it to the factory
+        """
+        return "ee07"
+
+    def __init__(self, tty: str, timeout: int, baudrate: int, *args, **kwargs):
+        connection = AsyncSerial(tty=tty, timeout=timeout, baudrate=baudrate)
+        device = EE07(connection)
+        super().__init__(device=device, *args, **kwargs)
+
     async def read(self):
         await super().read()
         humidity = await self.device.read_sensor1()

@@ -30,7 +30,7 @@ from typing import List, Type
 import yaml
 
 from factories import endpoint_factory
-from logger.device_factory import device_factory
+from factories.device_factory import device_factory
 
 try:
     from typing import Self  # Python >=3.11
