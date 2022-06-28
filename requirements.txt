@@ -1,6 +1,8 @@
 aiofiles>=0.7.0
+asyncio-mqtt~=0.12.1
 async-timeout>=3.0.1
 pyserial-asyncio>=0.6
+PyYAML~=6.0
+simplejson~=3.17.6
 -e git+https://github.com/PatrickBaus/TinkerforgeAsync@generators#egg=tinkerforge_async
 -e git+https://github.com/PatrickBaus/pyAsyncGpib#egg=async_gpib
-PyYAML~=6.0

@@ -97,6 +97,7 @@ class DataGenerator:
                 # Wait for the slowest device or at least {time_interval}
                 coros.append(asyncio.sleep(time_interval))
                 results = (await asyncio.gather(*coros, return_exceptions=True))[:-1]
+                results = tuple(results)
                 done = True
                 for result in results:
                     if isinstance(result, Exception):
