@@ -2,7 +2,7 @@ endpoints:
     file: {filename: 'data/LM399_popcorn_noise_test_{date}.csv', descriptor: "This file contains voltages of 10 LM399/ADR1399 references which are scanned using a K2002 and a SCAN2000 SSR card."}
     mqtt: {host: hal43.apq, port: 1883}
 devices:
-    - {uuid: 15d9f44c-03b4-465b-b596-4cb623d57199, driver: k2002_scanner, name: 0, pad: 16, timeout: 100, device_name: K2002,
+    - {uuid: 15d9f44c-03b4-465b-b596-4cb623d57199, driver: k2002_scanner, name: 0, pad: 16, timeout: 100, device_name: "K2002",
        initial_commands: [
            "*CLS",
            "*RST",
@@ -10,11 +10,12 @@ devices:
            ":SYST:AZER:TYPE SYNC",  # azero to line sync
            ":SYST:LSYN:STAT ON",  # line sync
            ":SENS:VOLT:DC:RANGe 20; DIG 9; NPLC 10; AVERage:COUNt 2; TCONtrol REPeat; STATe ON; ADVanced:STATe OFF",
-           ":FORM:DATA REAL,64",
+           ":FORM:DATA REAL,64",  # read data as bytes instead of text
            ":FORM:ELEM READing",  # only return the reading, not stuff like the channel or a timestamp
            ":FORM:EXP HPR",  # Needs FW > A06, possibly A09
            ":INITiate:CONTinuous OFF; :ABORt",  # disable continuous initiation and place K2002 in idle
            ":ROUTE:SCAN:LSEL INT",  # Enable the internal scanner card
+           ":INITiate:CONTinuous ON",  # Enable continuous triggering
        ],
        post_read_commands: [],
        active_channels: [0,1,2,3,4,5,6,7,8,9],
