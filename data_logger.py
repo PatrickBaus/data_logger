@@ -79,7 +79,7 @@ class DataGenerator:
         # create info header
         coros = [device.get_log_header() for device in self.__sensors]
         headers = await asyncio.gather(*coros)
-        result = [f"# {header}\n" for header in headers if headers]
+        result = [f"# {header}\n" for header in headers if header]
         # drop the microseconds
         date = datetime.utcnow().replace(tzinfo=timezone.utc).replace(microsecond=0)
         result.append(f"# Log started at UTC: {date.isoformat()}\n")
