@@ -59,6 +59,7 @@ class DataGenerator:
             if isinstance(result, Exception):
                 raise result
 
+        self.__logger.info("Devices initialized successfully.")
         return self
 
     async def __aexit__(

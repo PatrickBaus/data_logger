@@ -110,6 +110,7 @@ class LoggingDevice():
 
     async def connect(self):
         await self.__device.connect()
+        await self.initialize()
 
     async def disconnect(self):
         await self.__device.disconnect()
