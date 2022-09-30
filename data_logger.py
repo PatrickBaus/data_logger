@@ -39,10 +39,6 @@ try:
 except ImportError:
     from typing_extensions import Self
 
-# Devices
-from devices.async_serial import AsyncSerial
-from devices.coherent import Wavemaster
-
 DEFAULT_WAIT_TIMEOUT = 10  # in seconds
 LOG_LEVEL = logging.INFO
 
@@ -162,32 +158,6 @@ class LoggingDaemon:
             self.__logger.info('Logging daemon shut down.')
 
 
-# Report all mistakes managing asynchronous resources.
-warnings.simplefilter('always', ResourceWarning)
-# Enable logs from the ip connection. Set to debug for even more info
-logging.basicConfig(level=LOG_LEVEL)
-
-devices = {}    # If using Python < 3.7 use an ordered dict to ensure insertion order
-# The output file will have the same column order as the `devices` (ordered) dict
-
-serial_device = AsyncSerial(tty="/dev/ttyUSB5", timeout=2)
-wavemaster = Wavemaster(connection=serial_device)
-
-WAVEMASTER_INIT_COMMANDS = [
-    "PRD 1",    # 1 second interval
-]
-#devices["wavemaster"] = WavemasterLogger(
-#    wavemaster, device_name="Wavemaster", column_names=["Wavelength", ], initial_commands=WAVEMASTER_INIT_COMMANDS
-#)
-
-#ipcon = IPConnectionAsync(host='192.168.1.164')
-#ipcon = IPConnectionAsync(host='10.0.0.5')
-#bricklet = BrickletHumidityV2(base58decode("PTk"), ipcon) # Create tinkerforge sensor device
-#devices["humidity_bricklet"] = TinkerforgeLogger(
-#    bricklet, uuid=UUID('772ca54f-f1f1-48c3-bf6e-104ae64c1c2d'), device_name="humidity", column_names=["Humidity (TF)",]
-#)
-
-
 def init_argparse() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         usage="%(prog)s [-c config_file]", description="Read sensors and push the data to an MQTT server."
@@ -196,6 +166,10 @@ def init_argparse() -> argparse.ArgumentParser:
     parser.add_argument("-c", "--config_file", default="config.yml")
     return parser
 
+# Report all mistakes managing asynchronous resources.
+warnings.simplefilter('always', ResourceWarning)
+# Enable logs from the ip connection. Set to debug for even more info
+logging.basicConfig(level=LOG_LEVEL)
 
 try:
     parser = init_argparse()
@@ -209,7 +183,7 @@ try:
     logging_daemon = LoggingDaemon(
         endpoints=measurement_config['endpoints'],
         logging_devices=devices,
-        time_interval=1
+        time_interval=0
     )
 
     asyncio.run(logging_daemon.run(), debug=False)
