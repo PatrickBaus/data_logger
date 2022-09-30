@@ -82,4 +82,4 @@ class AsyncEthernet:
             finally:
                 # We guarantee, that the connection is removed
                 self.__writer, self.__reader = None, None
-                self.__logger.info("Ethernet connection disconnected from '%s:%d'", *self.__hostname)
+                self.__logger.info("Ethernet connection disconnected from '%s:%d'", *self.__host)
