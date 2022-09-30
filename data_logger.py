@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import signal
 import warnings
 from contextlib import AsyncExitStack
@@ -129,6 +130,9 @@ class LoggingDaemon:
         # drop the microseconds
         date = datetime.utcnow().replace(tzinfo=timezone.utc).replace(microsecond=0)
         self.__filename = filename.format(date=date.isoformat("_"))
+        # Check if the data dir exists, else create it
+        if not os.path.exists(os.path.dirname(self.__filename)):
+            os.makedirs(os.path.dirname(self.__filename))
         self.__filehandle = None
 
     async def __init_daemon(self):

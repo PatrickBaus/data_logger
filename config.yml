@@ -10,6 +10,7 @@ devices:
            ":SYST:AZER:TYPE SYNC",  # azero to line sync
            ":SYST:LSYN:STAT ON",  # line sync
            ":SENS:VOLT:DC:RANGe 20; DIG 9; NPLC 10; AVERage:COUNt 2; TCONtrol REPeat; STATe ON; ADVanced:STATe OFF",
+           ":SENS:VOLT:DC:AVER:STAT ON",  # Enable averaging
            ":FORM:DATA REAL,64",  # read data as bytes instead of text
            ":FORM:ELEM READing",  # only return the reading, not stuff like the channel or a timestamp
            ":FORM:EXP HPR",  # Needs FW > A06, possibly A09
