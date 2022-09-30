@@ -74,6 +74,7 @@ class Hp3458A():
     async def disconnect(self):
         await self.__conn.disconnect()
 
+
 class Keysight34470A():
     def __init__(self, connection):
         self.__conn = connection

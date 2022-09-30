@@ -33,6 +33,7 @@ from tinkerforge_async.bricklet_humidity_v2 import BrickletHumidityV2
 
 from devices.async_serial import AsyncSerial
 from devices.e_plus_e import EE07
+from devices.keysight import Hp3458A
 from devices.fluke import Fluke1524
 from devices.ilx import LDT5948
 from devices.keithley import Keithley2002
@@ -146,7 +147,24 @@ class GenericLogger(LoggingDevice):
         return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=data, unit=''),)
 
 
-class HP3458ALogger(GenericLogger):
+class Keysight3458ALogger(GenericLogger):
+    @classmethod
+    @property
+    def driver(cls) -> str:
+        """
+        Returns
+        -------
+        str
+            The driver that identifies it to the factory
+        """
+        return "hp3458a"
+
+    def __init__(self, name: int | str, pad: int, timeout, *args, **kwargs):
+        gpib_device = AsyncGpib(name=name, pad=pad, timeout=timeout)
+        device = Hp3458A(connection=gpib_device)
+
+        super().__init__(device=device, *args, **kwargs)
+
     async def get_log_header(self):
         cal_const71 = await self.device.get_acal1v()
         cal_const72 = await self.device.get_acal10v()
@@ -158,6 +176,11 @@ class HP3458ALogger(GenericLogger):
             f"{cal_const71}, CAL72={cal_const72}, TEMP={temperature_acal_dcv},"
             f"7Vref={cal_7v}, 40kref={cal_40k}"
         )
+
+    async def read(self):
+        await super().read()
+        data = await self.device.read()
+        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=data, unit=''),)
 
 
 class Keysight34470ALogger(GenericLogger):
