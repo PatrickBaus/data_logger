@@ -84,6 +84,7 @@ class Keysight34470A():
 
     async def connect(self):
         await self.__conn.connect()
+        await self.write(":ABORt")
         try:
             with async_timeout.timeout(0.5):    # 500ms timeout
                 await self.read()

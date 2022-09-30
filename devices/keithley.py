@@ -27,6 +27,7 @@ class KeithleyDMM6500():
 
     async def connect(self):
         await self.__conn.connect()
+        await self.write(":ABORt")
         try:
             with async_timeout.timeout(0.1):    # 100ms timeout
                 await self.read()
