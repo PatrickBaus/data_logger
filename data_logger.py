@@ -21,7 +21,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import os
 import signal
 import warnings
 from contextlib import AsyncExitStack
@@ -119,10 +118,9 @@ class DataGenerator:
                 self.__logger.exception("Error during read.")
 
 class LoggingDaemon:
-    def __init__(self, filename, description, logging_devices, endpoints, time_interval=0):
+    def __init__(self, logging_devices, endpoints, time_interval=0):
         self.__devices = logging_devices
         self.__endpoints = {endpoint: endpoint_factory.get(driver=endpoint, **endpoints[endpoint]) for endpoint in endpoints}
-        self.__file_description = description
         self.__time_interval = time_interval
 
         self.__timeout = self.__time_interval + DEFAULT_WAIT_TIMEOUT
@@ -131,11 +129,6 @@ class LoggingDaemon:
 
         # drop the microseconds
         date = datetime.utcnow().replace(tzinfo=timezone.utc).replace(microsecond=0)
-        self.__filename = filename.format(date=date.isoformat("_"))
-        # Check if the data dir exists, else create it
-        if not os.path.exists(os.path.dirname(self.__filename)):
-            os.makedirs(os.path.dirname(self.__filename))
-        self.__filehandle = None
 
     async def __init_daemon(self):
         async with AsyncExitStack() as stack:
@@ -215,10 +208,8 @@ try:
 
     logging_daemon = LoggingDaemon(
         endpoints=measurement_config['endpoints'],
-        filename="data/wavelength_{date}.csv",    # {date} will later be replaced by the current date in iso format
-        description=(
-            "This file contains Wavelength measurements of a Coherent Wavemaster wavemeter"
-        ), logging_devices=devices, time_interval=1
+        logging_devices=devices,
+        time_interval=1
     )
 
     asyncio.run(logging_daemon.run(), debug=False)
