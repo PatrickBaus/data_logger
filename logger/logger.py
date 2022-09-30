@@ -146,7 +146,7 @@ class GenericLogger(LoggingDevice):
         await super().read()
         data = await self.device.read()
 
-        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=data, unit=''),)
+        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=Decimal(data), unit=''),)
 
 
 class Keysight3458ALogger(GenericLogger):
@@ -207,7 +207,7 @@ class Keysight34470ALogger(LoggingDevice):
         await super().read()
         data = await self.device.query("READ?")
 
-        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=data, unit=''),)
+        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=Decimal(data), unit=''),)
 
 
 class KeithleyDMM6500Logger(LoggingDevice):
@@ -232,7 +232,7 @@ class KeithleyDMM6500Logger(LoggingDevice):
         await super().read()
         data = await self.device.query("READ?")
 
-        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=data, unit=''),)
+        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=Decimal(data), unit=''),)
 
 class LDT5948Logger(LoggingDevice):
     @classmethod

@@ -48,6 +48,7 @@ class Filewriter:
             "# This file was generated using the Python data logger"
             f" script v{__version__}.\n"
             "# Check https://github.com/PatrickBaus/data_logger for the latest version.\n"
+            "# {__file_descriptor}\n"
         ))
 
         task = asyncio.create_task(self._queue_writer())
