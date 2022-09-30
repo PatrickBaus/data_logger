@@ -199,7 +199,7 @@ class Keysight34470ALogger(GenericLogger):
         super().__init__(device=device, *args, **kwargs)
 
     async def get_log_header(self):
-        temperature_acal_ks4770a = await self.device.get_acalTemperature()
+        temperature_acal_ks4770a = await self.device.get_acal_temperature()
 
         return f"# KS34470A ACAL TEMP={temperature_acal_ks4770a}"
 
