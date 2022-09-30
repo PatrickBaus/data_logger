@@ -48,14 +48,14 @@ class AsyncEthernet:
             else:
                 coro = self.__reader.readexactly(length)
             data = await asyncio.wait_for(coro, timeout=self.__timeout)
-            return data.decode("utf-8")
+            return data
         else:
             # TODO: raise custom error
             pass
 
     async def write(self, cmd):
         if self.is_connected:
-            self.__writer.write(cmd.encode())
+            self.__writer.write(cmd)
             await asyncio.wait_for(self.__writer.drain(), timeout=self.__timeout)
         else:
             # TODO: raise custom error

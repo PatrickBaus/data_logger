@@ -94,14 +94,14 @@ class Keysight34470A():
         await self.__conn.disconnect()
 
     async def write(self, cmd):
-        await self.__conn.write(cmd + "\n")
+        await self.__conn.write((cmd + "\n").encode("ascii"))
 
     async def __read(self, length=None):
         # Strip the separator "\n"
         if length is None: # pylint: disable=no-else-return
-            return (await self.__conn.read())[:-1]
+            return (await self.__conn.read())[:-1].decode("utf-8")
         else:
-            return (await self.__conn.read(len=len+1))[:-1]
+            return (await self.__conn.read(length=length+1))[:-1]
 
     async def query(self, cmd):
         await self.write(cmd)
