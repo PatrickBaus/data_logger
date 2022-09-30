@@ -18,6 +18,7 @@
 # ##### END GPL LICENSE BLOCK #####
 from __future__ import annotations
 
+import argparse
 import asyncio
 import logging
 import os
@@ -32,6 +33,7 @@ import yaml
 
 from factories import endpoint_factory
 from factories.device_factory import device_factory
+from _version import __version__
 
 try:
     from typing import Self  # Python >=3.11
@@ -192,8 +194,21 @@ WAVEMASTER_INIT_COMMANDS = [
 #    bricklet, uuid=UUID('772ca54f-f1f1-48c3-bf6e-104ae64c1c2d'), device_name="humidity", column_names=["Humidity (TF)",]
 #)
 
+
+def init_argparse() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        usage="%(prog)s [-c config_file]", description="Read sensors and push the data to an MQTT server."
+    )
+    parser.add_argument("-v", "--version", action="version", version=f"{parser.prog} version {__version__}")
+    parser.add_argument("-c", "--config_file", default="config.yml")
+    return parser
+
+
 try:
-    with open('config.yml', 'r') as file:
+    parser = init_argparse()
+    args = parser.parse_args()
+
+    with open(args.config_file, 'r') as file:
         measurement_config = yaml.safe_load(file)
 
     devices = [device_factory.get(**device_config) for device_config in measurement_config.get('devices', [])]
