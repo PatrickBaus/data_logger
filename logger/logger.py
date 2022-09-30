@@ -111,6 +111,7 @@ class LoggingDevice():
 
     async def connect(self):
         await self.__device.connect()
+        self.__logger.debug("Device %s connected", self.__device)
         await self.initialize()
 
     async def disconnect(self):

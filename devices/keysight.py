@@ -33,7 +33,8 @@ class Hp3458A():
         return await self.read()
 
     async def write(self, cmd):
-        await self.__conn.write(cmd)
+        self.__logger.debug("Writing: %s", cmd)
+        await self.__conn.write((cmd + "\n").encode("ascii"))
 
     async def read(self):
         return (await self.__conn.read()).strip().decode("utf-8")
@@ -68,8 +69,10 @@ class Hp3458A():
         return await self.query("CAL? 175")
 
     async def connect(self):
+        self.__logger.debug("Connecting to HP3458A.")
         await self.__conn.connect()
-        await self.__conn.write("END ALWAYS")
+        await self.write("END ALWAYS; TARM HOLD")  # Recommended during setup as per manual p. 51
+        self.__logger.debug("Connected to HP3458A.")
 
     async def disconnect(self):
         await self.__conn.disconnect()

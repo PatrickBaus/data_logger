@@ -50,6 +50,7 @@ class DataGenerator:
 
     async def __aenter__(self) -> Self:
         self.__logger.info("Initializing devices")
+        self.__logger.debug("Devices to initialize: %s.", devices)
         # Connect to all devices
         coros = [device.connect() for device in self.__sensors]
         results = await asyncio.gather(*coros, return_exceptions=True)
