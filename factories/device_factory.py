@@ -3,7 +3,7 @@ This file contains the logger factory, that produces loggers using the parameter
 """
 from factories.generic_factory import DriverFactory
 from logger.logger import EE07Logger, Fluke1524Logger, Keithley2002Logger, Keithley2002ScannerLogger, \
-    Keysight34470ALogger, Keysight3458ALogger, LDT5948Logger, \
+    KeithleyDMM6500Logger, Keysight34470ALogger, Keysight3458ALogger, LDT5948Logger, \
     TinkerforgeLogger
 
 
