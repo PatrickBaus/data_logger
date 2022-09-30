@@ -31,12 +31,13 @@ from async_gpib import AsyncGpib
 from tinkerforge_async import IPConnectionAsync, base58decode
 from tinkerforge_async.bricklet_humidity_v2 import BrickletHumidityV2
 
+from devices.async_ethernet import AsyncEthernet
 from devices.async_serial import AsyncSerial
 from devices.e_plus_e import EE07
-from devices.keysight import Hp3458A
+from devices.keysight import Hp3458A, Keysight34470A
 from devices.fluke import Fluke1524
 from devices.ilx import LDT5948
-from devices.keithley import Keithley2002
+from devices.keithley import Keithley2002, KeithleyDMM6500
 
 
 @dataclass(frozen=True)
@@ -180,10 +181,46 @@ class Keysight3458ALogger(GenericLogger):
 
 
 class Keysight34470ALogger(GenericLogger):
+    @classmethod
+    @property
+    def driver(cls) -> str:
+        """
+        Returns
+        -------
+        str
+            The driver that identifies it to the factory
+        """
+        return "ks34470a"
+
+    def __init__(self, host: str, port: int, timeout, *args, **kwargs):
+        connection = AsyncEthernet(host=host, port=port, timeout=timeout)
+        device = Keysight34470A(connection=connection)
+
+        super().__init__(device=device, *args, **kwargs)
+
     async def get_log_header(self):
         temperature_acal_ks4770a = await self.device.get_acalTemperature()
 
         return f"# KS34470A ACAL TEMP={temperature_acal_ks4770a}"
+
+
+class KeithleyDMM6500Logger(GenericLogger):
+    @classmethod
+    @property
+    def driver(cls) -> str:
+        """
+        Returns
+        -------
+        str
+            The driver that identifies it to the factory
+        """
+        return "dmm6500"
+
+    def __init__(self, host: str, port: int, timeout, *args, **kwargs):
+        connection = AsyncEthernet(host=host, port=port, timeout=timeout)
+        device = KeithleyDMM6500(connection=connection)
+
+        super().__init__(device=device, *args, **kwargs)
 
 
 class LDT5948Logger(LoggingDevice):

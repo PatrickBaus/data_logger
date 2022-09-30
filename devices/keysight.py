@@ -82,12 +82,10 @@ class Keysight34470A():
     def __init__(self, connection):
         self.__conn = connection
 
-        self.__reader, self.__writer = None, None
-
     async def connect(self):
         await self.__conn.connect()
         try:
-            with async_timeout.timeout(0.5):    # 100ms timeout
+            with async_timeout.timeout(0.5):    # 500ms timeout
                 await self.read()
         except asyncio.TimeoutError:
             pass
