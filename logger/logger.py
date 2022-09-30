@@ -178,11 +178,6 @@ class Keysight3458ALogger(GenericLogger):
             f"7Vref={cal_7v}, 40kref={cal_40k}"
         )
 
-    async def read(self):
-        await super().read()
-        data = await self.device.read()
-        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=data, unit=''),)
-
 
 class Keysight34470ALogger(GenericLogger):
     async def get_log_header(self):
