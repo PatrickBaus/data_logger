@@ -180,7 +180,7 @@ class Keysight3458ALogger(GenericLogger):
         )
 
 
-class Keysight34470ALogger(GenericLogger):
+class Keysight34470ALogger(LoggingDevice):
     @classmethod
     @property
     def driver(cls) -> str:
@@ -203,8 +203,14 @@ class Keysight34470ALogger(GenericLogger):
 
         return f"# KS34470A ACAL TEMP={temperature_acal_ks4770a}"
 
+    async def read(self):
+        await super().read()
+        data = await self.device.query("READ?")
 
-class KeithleyDMM6500Logger(GenericLogger):
+        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=data, unit=''),)
+
+
+class KeithleyDMM6500Logger(LoggingDevice):
     @classmethod
     @property
     def driver(cls) -> str:
@@ -222,6 +228,11 @@ class KeithleyDMM6500Logger(GenericLogger):
 
         super().__init__(device=device, *args, **kwargs)
 
+    async def read(self):
+        await super().read()
+        data = await self.device.query("READ?")
+
+        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=data, unit=''),)
 
 class LDT5948Logger(LoggingDevice):
     @classmethod

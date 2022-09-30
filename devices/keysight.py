@@ -86,7 +86,7 @@ class Keysight34470A():
         await self.__conn.connect()
         await self.write(":ABORt")
         try:
-            with async_timeout.timeout(0.5):    # 500ms timeout
+            with async_timeout.timeout(0.1):    # 100ms timeout
                 await self.read()
         except asyncio.TimeoutError:
             pass
@@ -133,7 +133,6 @@ class Keysight34470A():
         await self.write("SENS:RES:NPLC {nplc}".format(nplc=nplc))
 
     async def read(self):
-        await self.write("READ?")
         # TODO: Catch special SCPI values
         # TODO: Catch +-9.9E37 = +-Inf or raise an error
         # TODO: Catch 9.91E37 = NaN or raise an error
