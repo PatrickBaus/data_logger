@@ -230,8 +230,8 @@ class KeithleyDMM6500Logger(LoggingDevice):
 
     async def read(self):
         await super().read()
-        data = await self.device.query("READ?")
-
+        data = await self.device.query("READ?", length=8)
+        data, = struct.unpack('d', data)  # The result of unpack is always a tuple, but we need only the first element
         return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=Decimal(data), unit=''),)
 
 class LDT5948Logger(LoggingDevice):
@@ -296,13 +296,13 @@ class Keithley2002Logger(LoggingDevice):
     async def query_channel(self, channel):
         await self.device.write(f":rout:clos (@{channel+1})")
         data = await self.device.query(":DATA:FRESh?", length=8)
-        data = struct.unpack('d', data)[0]      # The result of unpack is always a tuple
+        data, = struct.unpack('d', data)  # The result of unpack is always a tuple, but we need only the first element
         return DataEvent(sender=self.uuid, sid=channel, topic=self.base_topic + f"/channel{channel+1}", value=data, unit='V')
 
     async def read(self):
         await super().read()
         data = await self.device.query(":DATA:FRESh?", length=8)  # get an 8 *new* byte double from the instrument
-        data, = struct.unpack('d', data)
+        data, = struct.unpack('d', data)  # The result of unpack is always a tuple, but we need only the first element
         return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=data, unit=''),)
 
 
