@@ -100,19 +100,24 @@ class DataGenerator:
                 results = tuple(results)
                 done = True
                 for result in results:
+                    # log all exceptions, then raise the first one later
                     if isinstance(result, Exception):
                         self.__logger.error("Error during read.", exc_info=result)
                         done = False
                 if done:  # pylint: disable=no-else-return
                     yield datetime.utcnow(), tuple(sum(results, ()))
+                else:
+                    # raise the first exceptions
+                    for result in results:
+                        if isinstance(result, Exception):
+                            raise result
 
                 # Run post-read
                 coros = [device.post_read() for device in self.__sensors]
                 await asyncio.gather(*coros)
             except asyncio.TimeoutError:
                 self.__logger.error("Timeout during read. Retrying.")
-            except Exception:
-                self.__logger.exception("Error during read.")
+
 
 class LoggingDaemon:
     def __init__(self, logging_devices, endpoints, time_interval=0):
@@ -127,7 +132,7 @@ class LoggingDaemon:
         # drop the microseconds
         date = datetime.utcnow().replace(tzinfo=timezone.utc).replace(microsecond=0)
 
-    async def __init_daemon(self):
+    async def _read_sensors(self):
         async with AsyncExitStack() as stack:
             endpoint_queues = await asyncio.gather(
                 *[stack.enter_async_context(endpoint) for endpoint in self.__endpoints.values()]
@@ -145,18 +150,24 @@ class LoggingDaemon:
                     queue.put_nowait((timestamp, data))
                 self.__logger.info(','.join(map(str, data)))
 
-
     async def run(self):
         # Catch signals and shutdown
         signals = (signal.SIGHUP, signal.SIGTERM, signal.SIGINT)
-        main_task = asyncio.create_task(self.__init_daemon())
-        for sig in signals:
-            asyncio.get_running_loop().add_signal_handler(
-                sig, lambda: main_task.cancel())
-        try:
-            await main_task
-        except asyncio.CancelledError:
-            self.__logger.info('Logging daemon shut down.')
+        while "not cancelled":
+            main_task = asyncio.create_task(self._read_sensors())
+            for sig in signals:
+                asyncio.get_running_loop().add_signal_handler(
+                    sig, lambda: main_task.cancel())
+            try:
+                await main_task
+            except ConnectionError as exc:
+                self.__logger.error("Connection error: %s. Reconnecting", exc)
+            except asyncio.CancelledError:
+                self.__logger.info('Logging daemon shut down.')
+                raise
+            finally:
+                for sig in signals:
+                    asyncio.get_running_loop().remove_signal_handler(sig)
 
 
 def init_argparse() -> argparse.ArgumentParser:

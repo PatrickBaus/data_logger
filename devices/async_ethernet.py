@@ -20,6 +20,11 @@
 import asyncio
 import logging
 
+class NotConnectedError(ConnectionError):
+    """
+    Raised if there is no connection
+    """
+
 class AsyncEthernet:
     @property
     def separator(self):
@@ -50,16 +55,14 @@ class AsyncEthernet:
             data = await asyncio.wait_for(coro, timeout=self.__timeout)
             return data
         else:
-            # TODO: raise custom error
-            pass
+            raise NotConnectedError(f"Cannot read from {self.__host[0]}:{self.__host[1]}. Not connected.")
 
     async def write(self, cmd):
         if self.is_connected:
             self.__writer.write(cmd)
             await asyncio.wait_for(self.__writer.drain(), timeout=self.__timeout)
         else:
-            # TODO: raise custom error
-            pass
+            raise NotConnectedError(f"Cannot write to {self.__host[0]}:{self.__host[1]}. Not connected.")
 
     async def connect(self):
         if not self.is_connected:
