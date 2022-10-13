@@ -18,8 +18,11 @@
 # ##### END GPL LICENSE BLOCK #####
 
 import asyncio
-import async_timeout
+from datetime import datetime, timezone
 import logging
+
+import async_timeout
+
 
 class KeithleyDMM6500():
     def __init__(self, connection):
@@ -77,6 +80,16 @@ class Keithley2002():
         # Catch AttributeError if not connected
         await self.write("*IDN?", test_error=False)
         return await self.read()
+
+    async def get_cal_data(self):
+        cal_date_str = await self.query(':CALibration:PROTected:DATE?')
+        cal_datetime = datetime.strptime(cal_date_str, "%Y,%m,%d").replace(tzinfo=timezone.utc)
+        due_date_str = await self.query(':CALibration:PROTected:NDUE?')
+        due_datetime = datetime.strptime(due_date_str, "%Y,%m,%d").replace(tzinfo=timezone.utc)
+
+        #cal_const_str = await self.query(':CALibration:PROTected:DATA?')
+
+        return cal_datetime, due_datetime
 
     async def wait_for_data(self):
         try:

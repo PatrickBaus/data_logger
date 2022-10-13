@@ -297,6 +297,10 @@ class Keithley2002Logger(LoggingDevice):
 
         super().__init__(device=device, *args, **kwargs)
 
+    async def get_log_header(self):
+        cal_date, cal_due_date = await self.device.get_cal_data()
+        return (f"K2002 Cal date={cal_date}; Next Cal due={cal_due_date}")
+
     async def query_channel(self, channel):
         await self.device.write(f":rout:clos (@{channel+1})")
         data = await self.device.query(":DATA:FRESh?", length=8)

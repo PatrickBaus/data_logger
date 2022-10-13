@@ -24,6 +24,7 @@ import logging
 
 import async_timeout
 
+
 class Hp3458A():
     def __init__(self, connection):
         self.__conn = connection
