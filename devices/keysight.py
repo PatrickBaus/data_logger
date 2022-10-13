@@ -135,7 +135,6 @@ class Keysight34470A():
         cal_datetime = datetime.strptime(cal_date_str, "+%Y,+%m,+%d %H,%M,%S.%f").replace(tzinfo=timezone.utc)
         cal_temperature = Decimal(await self.query("CALibration:TEMPerature?"))
         cal_str = await self.query("CALibration:STRing?")
-        print(cal_datetime, cal_temperature, cal_str)
         return cal_datetime, cal_temperature, cal_str
 
     async def get_system_uptime(self):
