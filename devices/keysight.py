@@ -83,6 +83,7 @@ class Keysight34470A():
         self.__conn = connection
 
     async def connect(self):
+        self.__logger.debug("Connecting to Keysight 34470A.")
         await self.__conn.connect()
         await self.write(":ABORt")
         try:
@@ -90,6 +91,7 @@ class Keysight34470A():
                 await self.read()
         except asyncio.TimeoutError:
             pass
+        self.__logger.debug("Connected to Keysight 34470A.")
 
     async def disconnect(self):
         await self.__conn.disconnect()
@@ -113,7 +115,15 @@ class Keysight34470A():
         return await self.query("*IDN?")
 
     async def beep(self):
-        await self.write("SYSTEM:BEEP")
+        await self.write("SYSTem:BEEP")
+
+    async def acal_data(self):
+        data = await self.query("SYSTem:ACALibration:DATE?; SYSTem:ACALibration:TIME?; SYSTem:ACALibration:TEMPerature?")
+        print(data)
+
+    async def cal_data(self):
+        data = await self.query("CALibration:DATE?; CALibration:TIME?; CALibration:TEMPerature?")
+        print(data)
 
     async def acal(self):
         return "+0"
@@ -121,16 +131,16 @@ class Keysight34470A():
 #        return await self.query("*CAL?")
 
     async def get_acal_temperature(self):
-        return await self.query("SYST:ACAL:TEMP?")
+        return await self.query("SYSTem:ACAL:TEMP?")
 
     async def set_mode_resistance_2w(self):
-        await self.write("SENS:FUNC 'RES'")
+        await self.write("SENSe:FUNC 'RES'")
 
     async def set_mode_resistance_4w(self):
-        await self.write("SENS:FUNC 'FRES'")
+        await self.write("SENSe:FUNC 'FRES'")
 
     async def set_nplc(self, nplc):
-        await self.write("SENS:RES:NPLC {nplc}".format(nplc=nplc))
+        await self.write("SENSe:RES:NPLC {nplc}".format(nplc=nplc))
 
     async def read(self):
         # TODO: Catch special SCPI values

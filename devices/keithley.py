@@ -62,7 +62,6 @@ class KeithleyDMM6500():
         await self.write("SENS:RES:NPLC {nplc}".format(nplc=nplc))
 
     async def read(self):
-        await self.write("READ?")
         try:
             return await self.__read()
         except asyncio.TimeoutError:
