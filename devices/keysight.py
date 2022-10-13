@@ -24,6 +24,8 @@ import logging
 
 import async_timeout
 
+from devices.async_ethernet import AsyncEthernet
+
 
 class Hp3458A():
     def __init__(self, connection):
@@ -85,7 +87,7 @@ class Hp3458A():
 
 
 class Keysight34470A():
-    def __init__(self, connection):
+    def __init__(self, connection: AsyncEthernet):
         self.__conn = connection
 
         self.__logger = logging.getLogger(__name__)
@@ -107,16 +109,16 @@ class Keysight34470A():
     async def write(self, cmd):
         await self.__conn.write((cmd + "\n").encode("ascii"))
 
-    async def __read(self, length=None):
+    async def __read(self, length=None, **kwargs):
         # Strip the separator "\n"
         if length is None: # pylint: disable=no-else-return
-            return (await self.__conn.read())[:-1].decode("utf-8")
+            return (await self.__conn.read(**kwargs))[:-1].decode("utf-8")
         else:
-            return (await self.__conn.read(length=length+1))[:-1]
+            return (await self.__conn.read(length=length+1, **kwargs))[:-1]
 
-    async def query(self, cmd):
+    async def query(self, cmd, **kwargs):
         await self.write(cmd)
-        return await self.__read()
+        return await self.__read(**kwargs)
 
     async def get_id(self):
         # Catch AttributeError if not connected
@@ -143,10 +145,15 @@ class Keysight34470A():
         days, hours, minutes, seconds = map(int,uptime_str.split(","))
         return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
 
-    async def acal(self):
-        return "+0"
-#        There is a bug in the acal firmware. We will skip it for now
-#        return await self.query("*CAL?")
+    async def acal(self) -> None:
+        #  return "+0"
+        # Note: There is a bug in the acal firmware, which will cause an offset and drift back to zero offset afterwards
+        import time
+        print(f"ACAL start time: {time.time()}")
+        result = await self.query("*CAL?", timeout=100)
+        print(f"ACAL end time: {time.time()}")
+        if result != "+0":
+            print("Error during ACAL.")
 
     async def set_mode_resistance_2w(self):
         await self.write("SENSe:FUNC 'RES'")

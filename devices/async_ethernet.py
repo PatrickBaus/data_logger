@@ -11,6 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
+from __future__ import annotations
 
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
@@ -46,21 +47,21 @@ class AsyncEthernet:
         self.__reader, self.__writer = None, None
         self.__logger = logging.getLogger(__name__)
 
-    async def read(self, length=None):
+    async def read(self, length: int | None = None, timeout: float | None = None):
         if self.is_connected:
             if length is None:
                 coro = self.__reader.readuntil(self.__separator)
             else:
                 coro = self.__reader.readexactly(length)
-            data = await asyncio.wait_for(coro, timeout=self.__timeout)
+            data = await asyncio.wait_for(coro, timeout=self.__timeout if timeout is None else timeout)
             return data
         else:
             raise NotConnectedError(f"Cannot read from {self.__host[0]}:{self.__host[1]}. Not connected.")
 
-    async def write(self, cmd):
+    async def write(self, cmd, timeout: float | None = None):
         if self.is_connected:
             self.__writer.write(cmd)
-            await asyncio.wait_for(self.__writer.drain(), timeout=self.__timeout)
+            await asyncio.wait_for(self.__writer.drain(), timeout=self.__timeout if timeout is None else timeout)
         else:
             raise NotConnectedError(f"Cannot write to {self.__host[0]}:{self.__host[1]}. Not connected.")
 
