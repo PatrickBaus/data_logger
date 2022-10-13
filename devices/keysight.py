@@ -82,6 +82,7 @@ class Keysight34470A():
     def __init__(self, connection):
         self.__conn = connection
 
+        self.__logger = logging.getLogger(__name__)
     async def connect(self):
         self.__logger.debug("Connecting to Keysight 34470A.")
         await self.__conn.connect()
@@ -117,21 +118,29 @@ class Keysight34470A():
     async def beep(self):
         await self.write("SYSTem:BEEP")
 
-    async def acal_data(self):
-        data = await self.query("SYSTem:ACALibration:DATE?; SYSTem:ACALibration:TIME?; SYSTem:ACALibration:TEMPerature?")
-        print(data)
+    async def get_acal_data(self):
+        acal_date_str = f"{await self.query('SYSTem:ACALibration:DATE?')} {await self.query('SYSTem:ACALibration:TIME?')}"
+        acal_datetime = datetime.strptime(acal_date_str, "+%Y,+%m,+%d %H,%M,%S.%f").replace(tzinfo=timezone.utc)
+        acal_temperature = Decimal(await self.query("SYSTem:ACALibration:TEMPerature?"))
+        return acal_datetime, acal_temperature
 
-    async def cal_data(self):
-        data = await self.query("CALibration:DATE?; CALibration:TIME?; CALibration:TEMPerature?")
-        print(data)
+    async def get_cal_data(self):
+        cal_date_str = f"{await self.query('CALibration:DATE?')} {await self.query('CALibration:TIME?')}"
+        cal_datetime = datetime.strptime(cal_date_str, "+%Y,+%m,+%d %H,%M,%S.%f").replace(tzinfo=timezone.utc)
+        cal_temperature = Decimal(await self.query("CALibration:TEMPerature?"))
+        cal_str = await self.query("CALibration:STRing?")
+        print(cal_datetime, cal_temperature, cal_str)
+        return cal_datetime, cal_temperature, cal_str
+
+    async def get_system_uptime(self):
+        uptime_str = await self.query("SYSTem:UPTime?")
+        days, hours, minutes, seconds = map(int,uptime_str.split(","))
+        return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
 
     async def acal(self):
         return "+0"
 #        There is a bug in the acal firmware. We will skip it for now
 #        return await self.query("*CAL?")
-
-    async def get_acal_temperature(self):
-        return await self.query("SYSTem:ACAL:TEMP?")
 
     async def set_mode_resistance_2w(self):
         await self.write("SENSe:FUNC 'RES'")

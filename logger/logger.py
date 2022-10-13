@@ -199,10 +199,13 @@ class Keysight34470ALogger(LoggingDevice):
         super().__init__(device=device, *args, **kwargs)
 
     async def get_log_header(self):
-        temperature_acal_ks4770a = await self.device.get_acal_temperature()
-
-        return f"KS34470A ACAL TEMP={temperature_acal_ks4770a}"
-
+        acal_date, acal_temperatue = await self.device.get_acal_data()
+        cal_date, cal_temperature, _ = await self.device.get_cal_data()
+        uptime = await self.device.get_system_uptime()
+        return (f"KS34470A CAL DATE={cal_date}; TEMP={cal_temperature} °C;"
+                f" ACAL DATE={acal_date}; TEMP={acal_temperatue} °C;"
+                f" Uptime={uptime}"
+        )
     async def read(self):
         await super().read()
         data = await self.device.query("READ?")
@@ -254,7 +257,7 @@ class LDT5948Logger(LoggingDevice):
     async def get_log_header(self):
         kp, ki, kd = await self.device.get_pid_constants()  # pylint: disable=invalid-name
 
-        return f"LDT5948 PID constants Kp={kp:.2f}, Ki={ki:.3f}, Kd={kd:.3f}"
+        return f"LDT5948 PID constants Kp={kp:.2f}; Ki={ki:.3f}; Kd={kd:.3f}"
 
     async def read(self):
         await super().read()
