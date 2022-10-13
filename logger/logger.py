@@ -61,7 +61,7 @@ class DataEvent:
         return str(self.value)
 
 
-class LoggingDevice():
+class LoggingDevice:
     @property
     def column_names(self):
         """
@@ -176,9 +176,9 @@ class Keysight3458ALogger(GenericLogger):
         temperature = await self.device.get_temperature()
 
         return (f"HP3458A ACAL constants CAL71="
-            f"{cal_const71}; CAL72={cal_const72}; ACAL TEMP={temperature_acal_dcv} °C;"
-            f" 7Vref={cal_7v} V; 40kref={cal_40k} Ω; TEMP={temperature} °C"
-        )
+                f"{cal_const71}; CAL72={cal_const72}; ACAL TEMP={temperature_acal_dcv} °C;"
+                f" 7Vref={cal_7v} V; 40kref={cal_40k} Ω; TEMP={temperature} °C"
+                )
 
 
 class Keysight34470ALogger(LoggingDevice):
@@ -200,13 +200,14 @@ class Keysight34470ALogger(LoggingDevice):
         super().__init__(device=device, *args, **kwargs)
 
     async def get_log_header(self):
-        acal_date, acal_temperatue = await self.device.get_acal_data()
+        acal_date, acal_temperature = await self.device.get_acal_data()
         cal_date, cal_temperature, _ = await self.device.get_cal_data()
         uptime = await self.device.get_system_uptime()
         return (f"KS34470A CAL DATE={cal_date}; TEMP={cal_temperature} °C;"
-                f" ACAL DATE={acal_date}; TEMP={acal_temperatue} °C;"
+                f" ACAL DATE={acal_date}; TEMP={acal_temperature} °C;"
                 f" Uptime={uptime}"
-        )
+                )
+
     async def read(self):
         await super().read()
         data = await self.device.query("READ?")
@@ -234,9 +235,11 @@ class KeithleyDMM6500Logger(LoggingDevice):
 
     async def read(self):
         await super().read()
-        data = await self.device.query("READ?", length=8)
-        data, = struct.unpack('d', data)  # The result of unpack is always a tuple, but we need only the first element
+        data = await self.device.query("READ?")
+        # data = await self.device.query("READ?", length=8)
+        # data, = struct.unpack('d', data)  # The result of unpack is always a tuple, but we need only the first element
         return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=Decimal(data), unit=''),)
+
 
 class LDT5948Logger(LoggingDevice):
     @classmethod
@@ -305,7 +308,9 @@ class Keithley2002Logger(LoggingDevice):
         await self.device.write(f":rout:clos (@{channel+1})")
         data = await self.device.query(":DATA:FRESh?", length=8)
         data, = struct.unpack('d', data)  # The result of unpack is always a tuple, but we need only the first element
-        return DataEvent(sender=self.uuid, sid=channel, topic=self.base_topic + f"/channel{channel+1}", value=data, unit='V')
+        return DataEvent(
+            sender=self.uuid, sid=channel, topic=self.base_topic + f"/channel{channel+1}", value=data, unit='V'
+        )
 
     async def read(self):
         await super().read()
@@ -359,7 +364,6 @@ class TinkerforgeLogger(LoggingDevice):
             device = BrickletHumidityV2(base58decode(uid), ipcon)
         super().__init__(device=device, *args, **kwargs)
 
-
     # TODO: Rework TF api to be more general
     async def read(self):
         await super().read()
@@ -405,7 +409,8 @@ class Fluke1524Logger(LoggingDevice):
             self.device.read_sensor1(),
             self.device.read_sensor2()
         )
-        return (DataEvent(
+        return (
+            DataEvent(
                 sender=self.uuid,
                 sid=0,
                 topic=self.base_topic + "/temperature/channel1",
@@ -458,6 +463,7 @@ class EE07Logger(LoggingDevice):
                 unit='°C'
             ),
         )
+
 
 class WavemasterLogger(LoggingDevice):
     async def read(self):
