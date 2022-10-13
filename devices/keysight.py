@@ -18,6 +18,8 @@
 # ##### END GPL LICENSE BLOCK #####
 
 import asyncio
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 import logging
 
 import async_timeout
@@ -66,7 +68,10 @@ class Hp3458A():
         return await self.query("CAL? 1")
 
     async def get_temperature_acal_dcv(self):
-        return await self.query("CAL? 175")
+        return Decimal(await self.query("CAL? 175"))
+
+    async def get_temperature(self):
+        return Decimal(await self.query("TEMP?"))
 
     async def connect(self):
         self.__logger.debug("Connecting to HP3458A.")
@@ -83,6 +88,7 @@ class Keysight34470A():
         self.__conn = connection
 
         self.__logger = logging.getLogger(__name__)
+
     async def connect(self):
         self.__logger.debug("Connecting to Keysight 34470A.")
         await self.__conn.connect()

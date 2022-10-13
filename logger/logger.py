@@ -173,10 +173,11 @@ class Keysight3458ALogger(GenericLogger):
         cal_7v = await self.device.get_cal7v()
         cal_40k = await self.device.get_cal40k()
         temperature_acal_dcv = await self.device.get_temperature_acal_dcv()
+        temperature = await self.device.get_temperature()
 
         return (f"HP3458A ACAL constants CAL71="
-            f"{cal_const71}, CAL72={cal_const72}, TEMP={temperature_acal_dcv},"
-            f"7Vref={cal_7v}, 40kref={cal_40k}"
+            f"{cal_const71}; CAL72={cal_const72}; ACAL TEMP={temperature_acal_dcv} °C;"
+            f" 7Vref={cal_7v} V; 40kref={cal_40k} Ω; TEMP={temperature} °C"
         )
 
 
