@@ -36,6 +36,10 @@ class AsyncEthernet:
         self.__separator = value
 
     @property
+    def timeout(self):
+        return self.__timeout
+
+    @property
     def is_connected(self):
         return self.__writer is not None and not self.__writer.is_closing()
 

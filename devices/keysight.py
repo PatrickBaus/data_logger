@@ -149,9 +149,9 @@ class Keysight34470A():
         #  return "+0"
         # Note: There is a bug in the acal firmware, which will cause an offset and drift back to zero offset afterwards
         import time
-        print(f"ACAL start time: {time.time()}")
-        result = await self.query("*CAL?", timeout=100)
-        print(f"ACAL end time: {time.time()}")
+        self.__logger.debug("ACAL start time: %s", time.time())
+        result = await self.query("*CAL?", timeout=max(self.__conn.timeout, 100))
+        self.__logger.debug("ACAL end time: %s", time.time())
         if result != "+0":
             print("Error during ACAL.")
 
