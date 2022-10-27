@@ -172,10 +172,12 @@ class LoggingDaemon:
 
 def init_argparse() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        usage="%(prog)s [-c config_file]", description="Read sensors and push the data to an MQTT server."
+        usage="%(prog)s [-c config_file]",
+        description="Read sensors and push the data to an MQTT server.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("-v", "--version", action="version", version=f"{parser.prog} version {__version__}")
-    parser.add_argument("-c", "--config_file", default="config.yml")
+    parser.add_argument("-c", "--config_file", default="config.yml", help="The configuration file for the measurement.")
     return parser
 
 # Report all mistakes managing asynchronous resources.
@@ -187,8 +189,13 @@ try:
     parser = init_argparse()
     args = parser.parse_args()
 
-    with open(args.config_file, 'r') as file:
-        measurement_config = yaml.safe_load(file)
+    try:
+        with open(args.config_file, 'r') as file:
+            measurement_config = yaml.safe_load(file)
+    except FileNotFoundError:
+        logging.getLogger(__name__).error("Config file not found")
+        parser.print_help()
+        quit()
 
     devices = [device_factory.get(**device_config) for device_config in measurement_config.get('devices', [])]
 
