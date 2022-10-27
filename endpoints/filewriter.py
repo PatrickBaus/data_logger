@@ -36,8 +36,8 @@ class Filewriter:
 
     async def __aenter__(self) -> asyncio.Queue:
         self.__logger.info("Initializing file writer")
-        # Check if the directory exists, else create it
-        if not os.path.exists(os.path.dirname(self.__filename)):
+        # Check if the directory exists, else create it, unless there is no directory specified
+        if not os.path.exists(os.path.dirname(self.__filename)) and os.path.dirname(self.__filename):
             os.makedirs(os.path.dirname(self.__filename))
         # Open file, buffering=1 means line buffering
         self.__filehandle = await aiofiles.open(self.__filename, mode='a+', buffering=1)
