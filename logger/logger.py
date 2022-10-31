@@ -28,6 +28,7 @@ from typing import Any
 from uuid import UUID
 
 from async_gpib import AsyncGpib
+from prologix_gpib_async import AsyncPrologixGpibEthernetController
 from tinkerforge_async import IPConnectionAsync, base58decode
 from tinkerforge_async.bricklet_humidity_v2 import BrickletHumidityV2
 
@@ -35,7 +36,7 @@ from devices.async_ethernet import AsyncEthernet
 from devices.async_serial import AsyncSerial
 from devices.e_plus_e import EE07
 from devices.keysight import Hp3458A, Keysight34470A
-from devices.fluke import Fluke1524
+from devices.fluke import Fluke1524, Fluke1590
 from devices.ilx import LDT5948
 from devices.keithley import Keithley2002, KeithleyDMM6500
 
@@ -45,17 +46,12 @@ class DataEvent:
     """
     The base class to encapsulate any data event.
     """
-    timestamp: float = field(init=False)
     sender: UUID
     sid: int
     topic: str
     value: Any
     unit: str
-
-    def __post_init__(self):
-        # A slightly clumsy approach to setting the timestamp property, because this is frozen. Taken from:
-        # https://docs.python.org/3/library/dataclasses.html#frozen-instances
-        object.__setattr__(self, 'timestamp', datetime.now(timezone.utc))
+    timestamp: float = datetime.now(timezone.utc)
 
     def __str__(self):
         return str(self.value)
@@ -425,6 +421,48 @@ class Fluke1524Logger(LoggingDevice):
                 unit='°C'
             ),
         )
+
+
+class Fluke1590Logger(LoggingDevice):
+    @classmethod
+    @property
+    def driver(cls) -> str:
+        """
+        Returns
+        -------
+        str
+            The driver that identifies it to the factory
+        """
+        return "fluke1590"
+
+    def __init__(self, host: str, port: int, pad, timeout, *args, **kwargs):
+        gpib_device = AsyncPrologixGpibEthernetController(hostname=host, port=port, pad=pad, timeout=timeout)
+        device = Fluke1590(connection=gpib_device)
+
+        super().__init__(device=device, *args, **kwargs)
+
+    async def read(self):
+        channel, value, unit, timestamp = await self.device.read_temperature()
+        return (
+            DataEvent(
+                sender=self.uuid,
+                sid=channel,
+                topic=f"{self.base_topic}/resistance/channel{channel}",
+                value=value,
+                unit=unit,
+            ),
+        )
+
+    async def initialize(self):
+        await super().initialize()
+        await self.device.set_line_termination(self.device.LineTerminator.LF)
+        await self.device.set_timestamp(date=True, time=True)  # print date and time with each reading
+        await self.device.set_mode(self.device.SamplingMode.RUN)
+        await self.device.set_screensaver(5*60)
+        await self.device.set_time(datetime.utcnow())
+        await self.device.set_sample_interval(4)
+        await self.device.set_conversion_time(2)
+        await self.device.set_integration_time(4)
 
 
 class EE07Logger(LoggingDevice):
