@@ -114,7 +114,7 @@ class Fluke1590:
             timestamp = datetime.strptime(date, "%m-%d-%y")
         else:
             timestamp = datetime.utcnow()
-        return int(channel), Decimal(value), self.UNIT_CONVERSION[unit], timestamp
+        return int(channel)-1, Decimal(value), self.UNIT_CONVERSION[unit], timestamp
 
     async def read_channel(self, channel: int) -> str:
         # The manual states, no more than 5 commands per second (see 8.3 Digital Interface Commands in the manual)
