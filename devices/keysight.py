@@ -146,14 +146,16 @@ class Keysight34470A():
         return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
 
     async def acal(self) -> None:
-        #  return "+0"
-        # Note: There is a bug in the acal firmware, which will cause an offset and drift back to zero offset afterwards
-        import time
-        self.__logger.debug("ACAL start time: %s", time.time())
-        result = await self.query("*CAL?", timeout=max(self.__conn.timeout, 100))
-        self.__logger.debug("ACAL end time: %s", time.time())
+        """
+        Run auto-calibration. ACAL takes about 14.5 seconds.
+        Note: There is a bug in the acal firmware, which will cause an offset and drift back to zero offset afterwards.
+        It is therefore not recommended (IMHO) to run this.
+        """
+        self.__logger.debug("Running ACAL on 34470A this will take about 15 seconds.")
+        result = await self.query("*CAL?", timeout=max(self.__conn.timeout, 14.5*1.1))
+        self.__logger.debug("Finished ACAL on 34470A.")
         if result != "+0":
-            print("Error during ACAL.")
+            self.__logger.error("Error during ACAL of 34470A.")
 
     async def set_mode_resistance_2w(self):
         await self.write("SENSe:FUNC 'RES'")
