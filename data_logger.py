@@ -100,9 +100,11 @@ class DataGenerator:
                 results = tuple(results)
                 done = True
                 for result in results:
-                    # log all exceptions, then raise the first one later
+                    # We will raise the first error later.
                     if isinstance(result, Exception):
-                        self.__logger.error("Error during read.", exc_info=result)
+                        # Log all exceptions (except Timeouts, we will log it and retry later).
+                        if not isinstance(result, TimeoutError):
+                            self.__logger.error("Error during read.", exc_info=result)
                         done = False
                 if done:  # pylint: disable=no-else-return
                     yield datetime.utcnow(), tuple(sum(results, ()))
@@ -115,6 +117,8 @@ class DataGenerator:
                 # Run post-read
                 coros = [device.post_read() for device in self.__sensors]
                 await asyncio.gather(*coros)
+            except ValueError:
+                self.__logger.error("Sensor read invalid data. Retrying.")
             except asyncio.TimeoutError:
                 self.__logger.error("Timeout during read. Retrying.")
 
@@ -179,6 +183,7 @@ def init_argparse() -> argparse.ArgumentParser:
     parser.add_argument("-v", "--version", action="version", version=f"{parser.prog} version {__version__}")
     parser.add_argument("-c", "--config_file", default="config.yml", help="The configuration file for the measurement.")
     return parser
+
 
 # Report all mistakes managing asynchronous resources.
 warnings.simplefilter('always', ResourceWarning)
