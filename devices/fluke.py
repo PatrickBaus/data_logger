@@ -23,6 +23,9 @@ from enum import Enum, unique
 import re
 
 
+class InvalidDataError(ValueError):
+    """Raised if the device does not return the expected result."""
+
 @unique
 class SamplingMode(Enum):
     RUN = "r"
@@ -105,7 +108,11 @@ class Fluke1590:
         while not (await self.has_data()):
             await asyncio.sleep(0.2)
         result = await self.query("tem")
-        channel, value, unit, time, date = self.MEASUREMENT_REGEX.split(result)[1:-1]
+        try:
+            channel, value, unit, time, date = self.MEASUREMENT_REGEX.split(result)[1:-1]
+        except ValueError:
+            # Raised if the regex does not match, and therefore we have no values to unpack
+            raise InvalidDataError(f"The device {self} returned invalid data: '{result}'")
         if date is not None and time is not None:
             timestamp = datetime.strptime(f"{date} {time}", "%m-%d-%y %H:%M:%S")
         elif date is None and time is not None:
