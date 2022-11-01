@@ -44,12 +44,13 @@ class Fluke1590:
     SamplingMode = SamplingMode
     LineTerminator = LineTerminator
     # Regex tested against:
+    # "1: 10000.0900 O  7:57:00    11-1-22  "
     # "1: 10000.0879 O  15:02:52    10-31-22  "
     # "1: 10000.0906 O  10-31-22  "
     # "1: 10000.0902 O  15:24:06   "
     # "1: 10000.0869 O"
     MEASUREMENT_REGEX = re.compile(
-        r"^(\d): (\d+\.?\d*) (.)\s*(?:((?:[01]?\d|2[0-3]):[0-5]\d:[0-5]\d)\s*)?(?:((?:0[1-9]|1[012])-(?:[123]0|[012]\d|31)-\d\d)\s*)?$"
+        r"^(\d): (\d+\.?\d*) (.)\s*(?:((?:[01]?\d|2[0-3]):[0-5]\d:[0-5]\d)\s*)?(?:(\d{1,2}-\d{1,2}-\d{2})\s*)?$"
     )
 
     UNIT_CONVERSION = {
@@ -112,7 +113,7 @@ class Fluke1590:
             channel, value, unit, time, date = self.MEASUREMENT_REGEX.split(result)[1:-1]
         except ValueError:
             # Raised if the regex does not match, and therefore we have no values to unpack
-            raise InvalidDataError(f"The device {self} returned invalid data: '{result}'")
+            raise InvalidDataError(f"The device {self} returned invalid data: '{result}'") from None
         if date is not None and time is not None:
             timestamp = datetime.strptime(f"{date} {time}", "%m-%d-%y %H:%M:%S")
         elif date is None and time is not None:
