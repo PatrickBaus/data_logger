@@ -56,7 +56,7 @@ class Mqttwriter:
         reconnect_interval: int, default=5
             The time in seconds to wait between connection attempts.
         """
-        has_error = False
+        error_code = 0  # 0 = success
         self.__logger.info("Connecting worker to MQTT broker (%s:%i).", self.__host, self.__port)
         item = None
         while "loop not cancelled":
@@ -81,13 +81,13 @@ class Mqttwriter:
                                 await mqtt_client.publish(topic, payload=payload, qos=2)
                             item = None  # Get a new event to publish
                             self.__write_queue.task_done()
-                            has_error = False
+                            error_code = 0  # 0 = success
             except asyncio_mqtt.error.MqttError as exc:
                 # Only log an error once
-                if not has_error:
+                if error_code != exc.rc:
+                    error_code = exc.rc
                     self.__logger.error("MQTT error: %s. Retrying.", exc)
                 await asyncio.sleep(reconnect_interval)
-                has_error = True
             except Exception:   # pylint: disable=broad-except
                 # Catch all exceptions, log them, then try to restart the worker.
                 self.__logger.exception("Error while publishing data to MQTT broker. Reconnecting.")
