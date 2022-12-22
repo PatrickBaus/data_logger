@@ -215,3 +215,9 @@ except KeyboardInterrupt:
     # The loop will be canceled on a KeyboardInterrupt by the run() method, we
     # just want to suppress the exception
     pass
+except asyncio.CancelledError:
+    # The program will terminate now, so we swallow the error to supress
+    # the error message
+    pass
+finally:
+    logging.getLogger(__name__).info("Datalogger terminated. Have fun analyzing the data.")
