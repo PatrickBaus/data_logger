@@ -1,7 +1,7 @@
-aiofiles~=0.8.0
-asyncio-mqtt~=0.12.1
+aiofiles==22.1.0
+asyncio-mqtt==0.16.1
 pyserial-asyncio>=0.6
 PyYAML~=6.0
-simplejson~=3.17.6
+simplejson==3.18.0
 tinkerforge-async~=1.4.2
 async-gpib~=2.1.1
