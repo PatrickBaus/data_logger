@@ -98,7 +98,7 @@ class MqttWriter:
                     error_code = exc.rc
                     self.__logger.error("MQTT error: %s. Retrying.", exc)
             except ConnectionRefusedError:
-                self.__logger.info(
+                self.__logger.error(
                     "Connection refused by MQTT server (%s:%i). Retrying.",
                     self.__host,
                     self.__port,
@@ -108,15 +108,21 @@ class MqttWriter:
                 if error is not None:
                     error_code = int(error.group(1))
                     if error_code == 111:
-                        self.__logger.info(
+                        self.__logger.error(
                             "Connection refused by MQTT server (%s:%i). Retrying.",
                             self.__host,
                             self.__port,
                         )
+                    elif error_code == -3:
+                        self.__logger.error(
+                            "Temporary failure in name resolution of MQTT server (%s:%i). Retrying.",
+                            self.__host,
+                            self.__port,
+                        )
                     else:
-                        self.__logger.exception("Connection error. Retrying.")
+                        self.__logger.exception("MQTT Connection error. Retrying.")
                 else:
-                    self.__logger.exception("Connection error. Retrying.")
+                    self.__logger.error("MQTT Connection error. Retrying.")
             except Exception:   # pylint: disable=broad-except
                 # Catch all exceptions, log them, then try to restart the worker.
                 self.__logger.exception("Error while publishing data to MQTT broker. Reconnecting.")
