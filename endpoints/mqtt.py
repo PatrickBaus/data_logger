@@ -46,6 +46,18 @@ class MqttWriter:
 
     @staticmethod
     def _calculate_timeout(last_reconnect_attempt: float, reconnect_interval: float) -> float:
+        """
+        Calculates the time to wait between reconnect attempts.
+        Parameters
+        ----------
+        last_reconnect_attempt: A timestamp in seconds
+        reconnect_interval: The reconnect interval in seconds
+
+        Returns
+        -------
+        float
+            The number of seconds to wait. This is a number greater than 0.
+        """
         return max(0.0, reconnect_interval - (asyncio.get_running_loop().time() - last_reconnect_attempt))
 
     async def _consumer(
@@ -74,7 +86,7 @@ class MqttWriter:
             try:
                 self.__logger.info("Connecting worker to MQTT broker (%s:%i).", self.__host, self.__port)
                 async with asyncio_mqtt.Client(hostname=self.__host, port=self.__port) as mqtt_client:
-                    while "loop not cancelled":
+                    while "queue not done":
                         if item is None:
                             # only get new data if we have pushed everything to the broker
                             item = await self.__write_queue.get()

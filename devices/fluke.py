@@ -103,7 +103,11 @@ class Fluke1590:
     async def has_data(self) -> bool:
         result = await self.query("new")
         result = result.removeprefix("NEW: ")
-        return bool(int(result))
+        try:
+            return bool(int(result))
+        except ValueError:
+            # The device may reply to another (older) request and the answer is not an integer
+            return False
 
     async def read_temperature(self) -> tuple[int, Decimal, str, datetime]:
         while not (await self.has_data()):
