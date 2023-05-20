@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -302,10 +302,11 @@ class Keithley2002Logger(LoggingDevice):
 
     async def query_channel(self, channel):
         await self.device.write(f":rout:clos (@{channel+1})")
-        data = await self.device.query(":DATA:FRESh?", length=8)
+        data = await self.device.query(":DATA:FRESh?", length=8)  # get a *new* 8 byte double from the instrument
         try:
-            data, = struct.unpack('d', data)  # The result of unpack is always a tuple, but we need only the first element
-        except struct.error:
+            # The result of unpack is always a tuple, but we need only the first element
+            data, = struct.unpack('d', data)
+        except struct.error as exc:
             raise ValueError(f"Device returned invalid data {data}.") from exc
         return DataEvent(
             sender=self.uuid, sid=channel, topic=self.base_topic + f"/channel{channel+1}", value=data, unit='V'
@@ -313,10 +314,11 @@ class Keithley2002Logger(LoggingDevice):
 
     async def read(self):
         await super().read()
-        data = await self.device.query(":DATA:FRESh?", length=8)  # get an 8 *new* byte double from the instrument
+        data = await self.device.query(":DATA:FRESh?", length=8)  # get a *new* 8 byte double from the instrument
         try:
-            data, = struct.unpack('d', data)  # The result of unpack is always a tuple, but we need only the first element
-        except struct.error:
+            # The result of unpack is always a tuple, but we need only the first element
+            data, = struct.unpack('d', data)
+        except struct.error as exc:
             raise ValueError(f"Device returned invalid data {data}.") from exc
         return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=data, unit=''),)
 
