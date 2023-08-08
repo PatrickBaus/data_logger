@@ -22,8 +22,6 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import logging
 
-import async_timeout
-
 from devices.async_ethernet import AsyncEthernet
 
 
@@ -97,8 +95,7 @@ class Keysight34470A():
         await self.__conn.connect()
         await self.write(":ABORt")
         try:
-            with async_timeout.timeout(0.1):    # 100ms timeout
-                await self.read()
+            await asyncio.wait_for(self.read(), timeout=0.1)  # 100ms timeout
         except asyncio.TimeoutError:
             pass
         self.__logger.debug("Connected to Keysight 34470A.")
@@ -171,8 +168,7 @@ class Keysight34470A():
         # TODO: Catch +-9.9E37 = +-Inf or raise an error
         # TODO: Catch 9.91E37 = NaN or raise an error
         try:
-            with async_timeout.timeout(10):
-                return await self.__read()
+            return await asyncio.wait_for(self.__read(), timeout=10)
         except asyncio.TimeoutError:
             return None
 
