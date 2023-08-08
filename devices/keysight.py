@@ -25,7 +25,7 @@ import logging
 from devices.async_ethernet import AsyncEthernet
 
 
-class Hp3458A():
+class Hp3458A:
     def __init__(self, connection):
         self.__conn = connection
 

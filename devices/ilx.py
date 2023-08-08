@@ -21,12 +21,14 @@ import asyncio
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 
+
 class LdtMode(Enum):
     T = "T"
     SENSOR = "SENSOR"
     ITE = "ITE"
     VTE = "VTE"
     RAC = "RAC"
+
 
 class LDT5948:
     @property

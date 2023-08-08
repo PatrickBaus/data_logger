@@ -21,10 +21,8 @@ import asyncio
 from datetime import datetime, timezone
 import logging
 
-import async_timeout
 
-
-class KeithleyDMM6500():
+class KeithleyDMM6500:
     def __init__(self, connection):
         self.__conn = connection
 
@@ -32,8 +30,7 @@ class KeithleyDMM6500():
         await self.__conn.connect()
         await self.write(":ABORt")
         try:
-            with async_timeout.timeout(0.1):    # 100ms timeout
-                await self.read()
+            await asyncio.wait_for(self.read(), timeout=0.1)  # 100ms timeout
         except asyncio.TimeoutError:
             pass
 
@@ -45,7 +42,7 @@ class KeithleyDMM6500():
 
     async def __read(self, length=None):
         # Strip the separator "\n"
-        if length is None: # pylint: disable=no-else-return
+        if length is None:  # pylint: disable=no-else-return
             return (await self.__conn.read())[:-1].decode("utf-8")
         else:
             return (await self.__conn.read(length=length+1))[:-1]
@@ -71,7 +68,7 @@ class KeithleyDMM6500():
             return None
 
 
-class Keithley2002():
+class Keithley2002:
     def __init__(self, connection):
         self.__conn = connection
         self.__logger = logging.getLogger(__name__)
@@ -93,7 +90,7 @@ class Keithley2002():
 
     async def wait_for_data(self):
         try:
-            await self.__conn.wait((1 << 11) | (1<<14))    # Wait for RQS or TIMO
+            await self.__conn.wait((1 << 11) | (1 << 14))    # Wait for RQS or TIMO
         except asyncio.TimeoutError:
             self.__logger.warning("Timeout during wait. Is the IbaAUTOPOLL(0x7) bit set for the board? Or the timeout set too low?")
             raise

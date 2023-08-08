@@ -19,6 +19,7 @@
 
 import asyncio
 
+
 class Wavemaster:
     @property
     def connection(self):

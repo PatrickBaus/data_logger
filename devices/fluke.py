@@ -26,6 +26,7 @@ import re
 class InvalidDataError(ValueError):
     """Raised if the device does not return the expected result."""
 
+
 @unique
 class SamplingMode(Enum):
     RUN = "r"
@@ -139,7 +140,6 @@ class Fluke1590:
         # v[ersion] command
         result = await self.query("v")
         model, version = result.removeprefix("VER: ").split(",")
-        #return "Fluke", model, "0", version
         return f"Fluke,{model},0,{version}"
 
     async def set_mode(self, mode: SamplingMode) -> None:
@@ -214,6 +214,7 @@ class Fluke1590:
         time = await self.query("ieet")
         time = time.removeprefix("IEEE TIME: ").lower()
         return date == "on", time == "on"
+
 
 class Fluke1524:
     def __init__(self, conn):
