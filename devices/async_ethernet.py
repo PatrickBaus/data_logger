@@ -11,6 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
+from __future__ import annotations
 
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
@@ -20,6 +21,11 @@
 import asyncio
 import logging
 
+class NotConnectedError(ConnectionError):
+    """
+    Raised if there is no connection
+    """
+
 class AsyncEthernet:
     @property
     def separator(self):
@@ -28,6 +34,10 @@ class AsyncEthernet:
     @separator.setter
     def separator(self, value):
         self.__separator = value
+
+    @property
+    def timeout(self):
+        return self.__timeout
 
     @property
     def is_connected(self):
@@ -41,25 +51,23 @@ class AsyncEthernet:
         self.__reader, self.__writer = None, None
         self.__logger = logging.getLogger(__name__)
 
-    async def read(self, length=None):
+    async def read(self, length: int | None = None, timeout: float | None = None):
         if self.is_connected:
             if length is None:
                 coro = self.__reader.readuntil(self.__separator)
             else:
                 coro = self.__reader.readexactly(length)
-            data = await asyncio.wait_for(coro, timeout=self.__timeout)
-            return data.decode("utf-8")
+            data = await asyncio.wait_for(coro, timeout=self.__timeout if timeout is None else timeout)
+            return data
         else:
-            # TODO: raise custom error
-            pass
+            raise NotConnectedError(f"Cannot read from {self.__host[0]}:{self.__host[1]}. Not connected.")
 
-    async def write(self, cmd):
+    async def write(self, cmd, timeout: float | None = None):
         if self.is_connected:
-            self.__writer.write(cmd.encode())
-            await asyncio.wait_for(self.__writer.drain(), timeout=self.__timeout)
+            self.__writer.write(cmd)
+            await asyncio.wait_for(self.__writer.drain(), timeout=self.__timeout if timeout is None else timeout)
         else:
-            # TODO: raise custom error
-            pass
+            raise NotConnectedError(f"Cannot write to {self.__host[0]}:{self.__host[1]}. Not connected.")
 
     async def connect(self):
         if not self.is_connected:
@@ -82,4 +90,4 @@ class AsyncEthernet:
             finally:
                 # We guarantee, that the connection is removed
                 self.__writer, self.__reader = None, None
-                self.__logger.info("Ethernet connection disconnected from '%s:%d'", *self.__hostname)
+                self.__logger.info("Ethernet connection disconnected from '%s:%d'", *self.__host)

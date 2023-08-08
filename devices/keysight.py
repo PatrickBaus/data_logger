@@ -18,9 +18,14 @@
 # ##### END GPL LICENSE BLOCK #####
 
 import asyncio
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 import logging
 
 import async_timeout
+
+from devices.async_ethernet import AsyncEthernet
+
 
 class Hp3458A():
     def __init__(self, connection):
@@ -33,7 +38,8 @@ class Hp3458A():
         return await self.read()
 
     async def write(self, cmd):
-        await self.__conn.write(cmd)
+        self.__logger.debug("Writing: %s", cmd)
+        await self.__conn.write((cmd + "\n").encode("ascii"))
 
     async def read(self):
         return (await self.__conn.read()).strip().decode("utf-8")
@@ -65,74 +71,102 @@ class Hp3458A():
         return await self.query("CAL? 1")
 
     async def get_temperature_acal_dcv(self):
-        return await self.query("CAL? 175")
+        return Decimal(await self.query("CAL? 175"))
+
+    async def get_temperature(self):
+        return Decimal(await self.query("TEMP?"))
 
     async def connect(self):
+        self.__logger.debug("Connecting to HP3458A.")
         await self.__conn.connect()
-        await self.__conn.write("END ALWAYS")
+        await self.write("END ALWAYS; TARM HOLD")  # Recommended during setup as per manual p. 51
+        self.__logger.debug("Connected to HP3458A.")
 
     async def disconnect(self):
         await self.__conn.disconnect()
 
-class Keysight34470A():
-    def __init__(self, connection, loop=None):
-        self.__loop = asyncio.get_event_loop() if loop is None else loop
 
+class Keysight34470A():
+    def __init__(self, connection: AsyncEthernet):
         self.__conn = connection
 
-        self.__reader, self.__writer = None, None
+        self.__logger = logging.getLogger(__name__)
 
     async def connect(self):
+        self.__logger.debug("Connecting to Keysight 34470A.")
         await self.__conn.connect()
+        await self.write(":ABORt")
         try:
-            with async_timeout.timeout(0.5):    # 100ms timeout
+            with async_timeout.timeout(0.1):    # 100ms timeout
                 await self.read()
         except asyncio.TimeoutError:
             pass
+        self.__logger.debug("Connected to Keysight 34470A.")
 
     async def disconnect(self):
         await self.__conn.disconnect()
 
     async def write(self, cmd):
-        await self.__conn.write(cmd + "\n")
+        await self.__conn.write((cmd + "\n").encode("ascii"))
 
-    async def __read(self, length=None):
+    async def __read(self, length=None, **kwargs):
         # Strip the separator "\n"
         if length is None: # pylint: disable=no-else-return
-            return (await self.__conn.read())[:-1]
+            return (await self.__conn.read(**kwargs))[:-1].decode("utf-8")
         else:
-            return (await self.__conn.read(len=len+1))[:-1]
+            return (await self.__conn.read(length=length+1, **kwargs))[:-1]
 
-    async def query(self, cmd):
+    async def query(self, cmd, **kwargs):
         await self.write(cmd)
-        return await self.__read()
+        return await self.__read(**kwargs)
 
     async def get_id(self):
         # Catch AttributeError if not connected
         return await self.query("*IDN?")
 
     async def beep(self):
-        await self.write("SYSTEM:BEEP")
+        await self.write("SYSTem:BEEP")
 
-    async def acal(self):
-        return "+0"
-#        There is a bug in the acal firmware. We will skip it for now
-#        return await self.query("*CAL?")
+    async def get_acal_data(self):
+        acal_date_str = f"{await self.query('SYSTem:ACALibration:DATE?')} {await self.query('SYSTem:ACALibration:TIME?')}"
+        acal_datetime = datetime.strptime(acal_date_str, "+%Y,+%m,+%d %H,%M,%S.%f").replace(tzinfo=timezone.utc)
+        acal_temperature = Decimal(await self.query("SYSTem:ACALibration:TEMPerature?"))
+        return acal_datetime, acal_temperature
 
-    async def get_acal_temperature(self):
-        return await self.query("SYST:ACAL:TEMP?")
+    async def get_cal_data(self):
+        cal_date_str = f"{await self.query('CALibration:DATE?')} {await self.query('CALibration:TIME?')}"
+        cal_datetime = datetime.strptime(cal_date_str, "+%Y,+%m,+%d %H,%M,%S.%f").replace(tzinfo=timezone.utc)
+        cal_temperature = Decimal(await self.query("CALibration:TEMPerature?"))
+        cal_str = await self.query("CALibration:STRing?")
+        return cal_datetime, cal_temperature, cal_str
+
+    async def get_system_uptime(self):
+        uptime_str = await self.query("SYSTem:UPTime?")
+        days, hours, minutes, seconds = map(int,uptime_str.split(","))
+        return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
+
+    async def acal(self) -> None:
+        """
+        Run auto-calibration. ACAL takes about 14.5 seconds.
+        Note: There is a bug in the acal firmware, which will cause an offset and drift back to zero offset afterwards.
+        It is therefore not recommended (IMHO) to run this.
+        """
+        self.__logger.debug("Running ACAL on 34470A this will take about 15 seconds.")
+        result = await self.query("*CAL?", timeout=max(self.__conn.timeout, 14.5*1.1))
+        self.__logger.debug("Finished ACAL on 34470A.")
+        if result != "+0":
+            self.__logger.error("Error during ACAL of 34470A.")
 
     async def set_mode_resistance_2w(self):
-        await self.write("SENS:FUNC 'RES'")
+        await self.write("SENSe:FUNC 'RES'")
 
     async def set_mode_resistance_4w(self):
-        await self.write("SENS:FUNC 'FRES'")
+        await self.write("SENSe:FUNC 'FRES'")
 
     async def set_nplc(self, nplc):
-        await self.write("SENS:RES:NPLC {nplc}".format(nplc=nplc))
+        await self.write("SENSe:RES:NPLC {nplc}".format(nplc=nplc))
 
     async def read(self):
-        await self.write("READ?")
         # TODO: Catch special SCPI values
         # TODO: Catch +-9.9E37 = +-Inf or raise an error
         # TODO: Catch 9.91E37 = NaN or raise an error

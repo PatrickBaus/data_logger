@@ -66,24 +66,24 @@ class LDT5948:
             result = await self.read()
             return result
 
-    async def get_id(self):
+    async def get_id(self) -> str:
         return await self.query("*IDN?")
 
-    async def read_temperature(self):
+    async def read_temperature(self) -> Decimal:
         result = await self.query("MEAS:TEMP?")
         try:
             return Decimal(result)
         except InvalidOperation as exc:
             raise ValueError(f"Could not convert {result} to Decimal") from exc
 
-    async def read_current(self):
+    async def read_current(self) -> Decimal:
         result = await self.query("MEAS:ITE?")
         try:
             return Decimal(result)
         except InvalidOperation as exc:
             raise ValueError(f"Could not convert {result} to Decimal") from exc
 
-    async def read_voltage(self):
+    async def read_voltage(self) -> Decimal:
         result = await self.query("MEAS:VTE?")
         try:
             return Decimal(result)
@@ -93,7 +93,7 @@ class LDT5948:
     async def set_enabled(self, value):
         await self.write(f"OUTPUT {bool(value)}")
 
-    async def is_enabled(self):
+    async def is_enabled(self) -> bool:
         result = await self.query("OUTPUT?")
         if result == '1':
             result = True
@@ -109,26 +109,26 @@ class LDT5948:
         assert 0 <= kd <= 999.999
         await self.write(f"PID {kp:.2f},{ki:.3f},{kd:.3f}")
 
-    async def get_pid_constants(self):
+    async def get_pid_constants(self) -> tuple[Decimal, Decimal, Decimal]:
         result = await self.query("PID?")
-        return list(map(Decimal, result.split(",")))
+        return tuple(map(Decimal, result.split(",")))
 
     async def set_temperature_setpoint(self, value):
         await self.write(f"SET:TEMP {value:.3f}")
 
-    async def get_temperature_setpoint(self):
+    async def get_temperature_setpoint(self) -> Decimal:
         return Decimal(await self.query("SET:TEMP?"))
 
     async def set_mode(self, mode):
         await self.write(f"MODE {mode.value}")
 
-    async def get_mode(self):
+    async def get_mode(self) -> LdtMode:
         return LdtMode(await self.query("MODE?"))
 
     async def set_current_setpoint(self, value):
         await self.write(f"SET:ITE {value:.3f}")
 
-    async def get_current_setpoint(self):
+    async def get_current_setpoint(self) -> Decimal:
         result = await self.query("SET:ITE?")
         try:
             return Decimal(result)
