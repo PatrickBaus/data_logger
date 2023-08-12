@@ -7,7 +7,7 @@ import re
 from types import TracebackType
 from typing import Type
 
-import asyncio_mqtt
+import aiomqtt
 import simplejson as json
 
 from logger.logger import DataEvent
@@ -85,7 +85,7 @@ class MqttWriter:
             last_reconnect_attempt = asyncio.get_running_loop().time()
             try:
                 self.__logger.info("Connecting worker to MQTT broker (%s:%i).", self.__host, self.__port)
-                async with asyncio_mqtt.Client(hostname=self.__host, port=self.__port) as mqtt_client:
+                async with aiomqtt.Client(hostname=self.__host, port=self.__port) as mqtt_client:
                     while "queue not done":
                         if item is None:
                             # only get new data if we have pushed everything to the broker
@@ -104,7 +104,7 @@ class MqttWriter:
                             item = None  # Get a new event to publish
                             self.__write_queue.task_done()
                             error_code = 0  # 0 = success
-            except asyncio_mqtt.error.MqttCodeError as exc:
+            except aiomqtt.error.MqttCodeError as exc:
                 # Only log an error once
                 if error_code != exc.rc:
                     error_code = exc.rc
@@ -115,7 +115,7 @@ class MqttWriter:
                     self.__host,
                     self.__port,
                 )
-            except asyncio_mqtt.error.MqttError as exc:
+            except aiomqtt.error.MqttError as exc:
                 error = re.search(r"^\[Errno (\d+)\]", str(exc))
                 if error is not None:
                     error_code = int(error.group(1))
