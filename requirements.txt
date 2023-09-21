@@ -5,4 +5,4 @@ PyYAML~=6.0
 simplejson~=3.19.1
 tinkerforge-async~=1.4.2
 async-gpib~=2.1.1
-prologix-gpib-async~=1.4.10
+prologix-gpib-async~=1.4.12
