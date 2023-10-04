@@ -1,4 +1,4 @@
-aiofiles==23.2.1
+aiofiles~=23.2.1
 aiomqtt~=1.2.1
 pyserial-asyncio>=0.6
 PyYAML~=6.0
