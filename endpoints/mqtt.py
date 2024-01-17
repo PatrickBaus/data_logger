@@ -104,7 +104,7 @@ class MqttWriter:
                             item = None  # Get a new event to publish
                             self.__write_queue.task_done()
                             error_code = 0  # 0 = success
-            except aiomqtt.error.MqttCodeError as exc:
+            except aiomqtt.MqttCodeError as exc:
                 # Only log an error once
                 if error_code != exc.rc:
                     error_code = exc.rc
@@ -115,7 +115,7 @@ class MqttWriter:
                     self.__host,
                     self.__port,
                 )
-            except aiomqtt.error.MqttError as exc:
+            except aiomqtt.MqttError as exc:
                 error = re.search(r"^\[Errno (\d+)\]", str(exc))
                 if error is not None:
                     error_code = int(error.group(1))
