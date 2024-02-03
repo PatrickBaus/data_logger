@@ -36,8 +36,9 @@ from _version import __version__
 from factories import device_factory, endpoint_factory
 from logger.logger import DataEvent
 
+from typing import cast
 try:
-    from typing import Self, cast  # Python >=3.11
+    from typing import Self  # Python >=3.11
 except ImportError:
     from typing_extensions import Self
 
