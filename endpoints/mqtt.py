@@ -5,7 +5,6 @@ import datetime
 import logging
 import re
 from types import TracebackType
-from typing import Type
 
 import aiomqtt
 import simplejson as json
@@ -15,7 +14,6 @@ from logger.logger import DataEvent
 
 class MqttWriter:
     @classmethod
-    @property
     def driver(cls) -> str:
         """
         Returns
@@ -29,18 +27,18 @@ class MqttWriter:
         self.__host = str(host)
         self.__port = int(port)
         self.__number_of_workers = int(number_of_workers)
-        self.__write_queue: asyncio.Queue[DataEvent] = asyncio.Queue()
+        self.__write_queue: asyncio.Queue[tuple[datetime.datetime, tuple[DataEvent, ...]]] = asyncio.Queue()
         self.__running_tasks: set[asyncio.Task] = set()
         self.__logger = logging.getLogger(__name__)
 
     @staticmethod
     def _convert_to_json(timestamp: datetime.datetime, event: DataEvent):
         payload = {
-            'timestamp': timestamp.timestamp(),
-            'uuid': str(event.sender),
-            'sid': event.sid,
-            'value': event.value,
-            'unit': event.unit
+            "timestamp": timestamp.timestamp(),
+            "uuid": str(event.sender),
+            "sid": event.sid,
+            "value": event.value,
+            "unit": event.unit,
         }
         return event.topic, json.dumps(payload, use_decimal=True)
 
@@ -58,12 +56,12 @@ class MqttWriter:
         float
             The number of seconds to wait. This is a number greater than 0.
         """
-        return max(0.0, reconnect_interval - (asyncio.get_running_loop().time() - last_reconnect_attempt))
+        return max(
+            0.0,
+            reconnect_interval - (asyncio.get_running_loop().time() - last_reconnect_attempt),
+        )
 
-    async def _consumer(
-            self,
-            reconnect_interval: int = 5
-    ) -> None:
+    async def _consumer(self, reconnect_interval: int = 5) -> None:
         """
         Pushes the data from the input queue to the MQTT broker. It will make sure,
         that no data is lost if the MQTT broker disconnects.
@@ -74,7 +72,7 @@ class MqttWriter:
             The time in seconds to wait between connection attempts.
         """
         error_code = 0  # 0 = success
-        item = None
+        item: tuple[datetime.datetime, tuple[DataEvent, ...]] | None = None
         last_reconnect_attempt = asyncio.get_running_loop().time() - reconnect_interval
         while "not connected":
             # Wait for at least reconnect_interval before connecting again
@@ -84,7 +82,11 @@ class MqttWriter:
             await asyncio.sleep(timeout)
             last_reconnect_attempt = asyncio.get_running_loop().time()
             try:
-                self.__logger.info("Connecting worker to MQTT broker (%s:%i).", self.__host, self.__port)
+                self.__logger.info(
+                    "Connecting worker to MQTT broker (%s:%i).",
+                    self.__host,
+                    self.__port,
+                )
                 async with aiomqtt.Client(hostname=self.__host, port=self.__port) as mqtt_client:
                     while "queue not done":
                         if item is None:
@@ -95,7 +97,7 @@ class MqttWriter:
                             payloads = [self._convert_to_json(timestamp, event) for event in events]
                         except TypeError:
                             self.__logger.exception("Error while serializing DataEvent: %s.", item)
-                            item = None    # Drop the event
+                            item = None  # Drop the event
                             self.__write_queue.task_done()
                         else:
                             for topic, payload in payloads:
@@ -135,7 +137,7 @@ class MqttWriter:
                         self.__logger.exception("MQTT Connection error. Retrying.")
                 else:
                     self.__logger.error("MQTT Connection error. Retrying.")
-            except Exception:   # pylint: disable=broad-except
+            except Exception:  # pylint: disable=broad-except
                 # Catch all exceptions, log them, then try to restart the worker.
                 self.__logger.exception("Error while publishing data to MQTT broker. Reconnecting.")
 
@@ -148,10 +150,10 @@ class MqttWriter:
         return self.__write_queue
 
     async def __aexit__(
-            self,
-            exc_type: Type[BaseException] | None,
-            exc: BaseException | None,
-            traceback: TracebackType | None
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
     ) -> None:
         try:
             await asyncio.wait_for(self.__write_queue.join(), timeout=3)
@@ -159,5 +161,6 @@ class MqttWriter:
             self.__logger.error("Timeout while flushing the MQTT writer.")
 
         # Stop running tasks
-        [task.cancel() for task in self.__running_tasks]
+        for task in self.__running_tasks:
+            task.cancel()
         self.__logger.info("MQTT endpoint at '%s:%i' closed.", self.__host, self.__port)

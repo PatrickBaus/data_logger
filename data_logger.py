@@ -22,20 +22,22 @@ import argparse
 import asyncio
 import logging
 import signal
+import sys
 import warnings
+from collections.abc import AsyncIterator, Awaitable
 from contextlib import AsyncExitStack
 from datetime import datetime, timezone
 from itertools import chain
 from types import TracebackType
-from typing import List, Type
+
 import yaml
 
-from factories import endpoint_factory
-from factories.device_factory import device_factory
 from _version import __version__
+from factories import device_factory, endpoint_factory
+from logger.logger import DataEvent
 
 try:
-    from typing import Self  # Python >=3.11
+    from typing import Self, cast  # Python >=3.11
 except ImportError:
     from typing_extensions import Self
 
@@ -63,10 +65,10 @@ class DataGenerator:
         return self
 
     async def __aexit__(
-            self,
-            exc_type: Type[BaseException] | None,
-            exc: BaseException | None,
-            traceback: TracebackType | None
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
     ) -> None:
         self.__logger.debug("Disconnecting devices.")
         coros = [device.disconnect() for device in self.__sensors]
@@ -75,7 +77,7 @@ class DataGenerator:
             if isinstance(result, Exception):
                 self.__logger.error("Error during shutdown of the data generator.", exc_info=result)
 
-    async def get_header(self) -> List[str]:
+    async def get_header(self) -> list[str]:
         self.__logger.debug("Creating file header")
         # create info header
         coros = [device.get_log_header() for device in self.__sensors]
@@ -86,31 +88,39 @@ class DataGenerator:
         result.append(f"# Log started at UTC: {date.isoformat()}\n")
 
         # create column names
-        column_names = chain(["Date", ], *[device.column_names for device in self.__sensors])
+        column_names = chain(
+            [
+                "Date",
+            ],
+            *[device.column_names for device in self.__sensors],
+        )
         result.append(f"# {','.join(column_names)}\n")
         return result
 
-    async def read_sensors(self, time_interval):
+    async def read_sensors(self, time_interval) -> AsyncIterator[tuple[datetime, tuple[DataEvent, ...]]]:
         self.__logger.info("Reading data from devices")
         while "not canceled":
             try:
+                coros: list[Awaitable[tuple[DataEvent] | None]]
                 coros = [device.read() for device in self.__sensors]
                 # Wait for the slowest device or at least {time_interval}
                 coros.append(asyncio.sleep(time_interval))
-                results = (await asyncio.gather(*coros, return_exceptions=True))[:-1]
-                results = tuple(results)
+                #  Strip the None result from sleep() at the end
+                results = tuple((await asyncio.gather(*coros, return_exceptions=True))[:-1])
                 done = True
                 for result in results:
                     # We will raise the first error later.
+                    if isinstance(result, BaseException):
+                        done = False
                     if isinstance(result, Exception):
                         # Log all exceptions (except Timeouts, we will log it and retry later).
                         if not isinstance(result, TimeoutError):
                             self.__logger.error("Error during read.", exc_info=result)
-                        done = False
                 if done:  # pylint: disable=no-else-return
+                    results = cast(tuple[tuple[DataEvent], ...], results)  # done is false if there are BaseExceptions
                     yield datetime.utcnow(), tuple(sum(results, ()))
                 else:
-                    # raise the first exceptions
+                    # raise the first exception
                     for result in results:
                         if isinstance(result, Exception):
                             raise result
@@ -127,15 +137,12 @@ class DataGenerator:
 class LoggingDaemon:
     def __init__(self, logging_devices, endpoints, time_interval=0):
         self.__devices = logging_devices
-        self.__endpoints = {endpoint: endpoint_factory.get(driver=endpoint, **endpoints[endpoint]) for endpoint in endpoints}
+        self.__endpoints = {
+            endpoint: endpoint_factory.get(driver=endpoint, **endpoints[endpoint]) for endpoint in endpoints
+        }
         self.__time_interval = time_interval
 
-        self.__timeout = self.__time_interval + DEFAULT_WAIT_TIMEOUT
-
         self.__logger = logging.getLogger(__name__)
-
-        # drop the microseconds
-        date = datetime.utcnow().replace(tzinfo=timezone.utc).replace(microsecond=0)
 
     async def _read_sensors(self):
         async with AsyncExitStack() as stack:
@@ -147,13 +154,13 @@ class LoggingDaemon:
 
             if "file" in self.__endpoints:
                 await asyncio.gather(
-                    *[self.__endpoints['file'].write(line for line in await data_generator.get_header())]
+                    *[self.__endpoints["file"].write(line for line in await data_generator.get_header())]
                 )
 
             async for timestamp, data in data_generator.read_sensors(self.__time_interval):
                 for queue in endpoint_queues:
                     queue.put_nowait((timestamp, data))
-                self.__logger.info(','.join(map(str, data)))
+                self.__logger.info(",".join(map(str, data)))
 
     async def run(self):
         # Catch signals and shutdown
@@ -161,14 +168,13 @@ class LoggingDaemon:
         while "not cancelled":
             main_task = asyncio.create_task(self._read_sensors())
             for sig in signals:
-                asyncio.get_running_loop().add_signal_handler(
-                    sig, lambda: main_task.cancel())
+                asyncio.get_running_loop().add_signal_handler(sig, main_task.cancel)
             try:
                 await main_task
             except ConnectionError as exc:
                 self.__logger.error("Connection error: %s. Reconnecting", exc)
             except asyncio.CancelledError:
-                self.__logger.info('Logging daemon shut down.')
+                self.__logger.info("Logging daemon shut down.")
                 raise
             finally:
                 for sig in signals:
@@ -176,25 +182,35 @@ class LoggingDaemon:
 
 
 def init_argparse() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    arg_parser = argparse.ArgumentParser(
         usage="%(prog)s [-c config_file]",
         description="Read sensors and push the data to an MQTT server.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("-v", "--version", action="version", version=f"{parser.prog} version {__version__}")
-    parser.add_argument("-c", "--config_file", default="config.yml", help="The configuration file for the measurement.")
-    return parser
+    arg_parser.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=f"{parser.prog} version {__version__}",
+    )
+    arg_parser.add_argument(
+        "-c",
+        "--config_file",
+        default="config.yml",
+        help="The configuration file for the measurement.",
+    )
+    return arg_parser
 
 
 # Report all mistakes managing asynchronous resources.
-warnings.simplefilter('always', ResourceWarning)
+warnings.simplefilter("always", ResourceWarning)
 # Enable logs from the ip connection. Set to debug for even more info
 logging.basicConfig(level=LOG_LEVEL)
 
 # Set up a file logger for errors
 logfile_handler = logging.FileHandler("errors.log")
 logfile_handler.setLevel(level=logging.ERROR)
-logfile_handler.setFormatter(logging.Formatter(fmt=ERROR_LOG_FMT, datefmt='%Y-%m-%d %H:%M:%S'))
+logfile_handler.setFormatter(logging.Formatter(fmt=ERROR_LOG_FMT, datefmt="%Y-%m-%d %H:%M:%S"))
 logging.getLogger().addHandler(logfile_handler)
 
 try:
@@ -202,19 +218,19 @@ try:
     args = parser.parse_args()
 
     try:
-        with open(args.config_file, 'r') as file:
+        with open(args.config_file, "r", encoding="utf-8") as file:
             measurement_config = yaml.safe_load(file)
     except FileNotFoundError:
         logging.getLogger(__name__).error("Config file not found")
         parser.print_help()
-        quit()
+        sys.exit(1)
 
-    devices = [device_factory.get(**device_config) for device_config in measurement_config.get('devices', [])]
+    devices = [device_factory.get(**device_config) for device_config in measurement_config.get("devices", [])]
 
     logging_daemon = LoggingDaemon(
-        endpoints=measurement_config['endpoints'],
+        endpoints=measurement_config["endpoints"],
         logging_devices=devices,
-        time_interval=0
+        time_interval=0,
     )
 
     asyncio.run(logging_daemon.run(), debug=False)

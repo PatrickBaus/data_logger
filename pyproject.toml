@@ -1,0 +1,77 @@
+[project]
+name = "data_logger"
+authors = [
+  { name="Patrick Baus", email="patrick.baus@physik.tu-darmstadt.de" },
+]
+description = "Python3 AsyncIO data logger"
+readme = "README.md"
+license = { text="GNU General Public License v3 (GPLv3)" }
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Development Status :: 5 - Production/Stable",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Natural Language :: English",
+    "Topic :: Scientific/Engineering",
+]
+keywords = ["data logger", "GPIB", ]
+dynamic = ["version"]
+dependencies = [
+    "typing-extensions; python_version <'3.11'",
+    "aiofiles",
+    "aiomqtt",
+    "pyserial-asyncio",
+    "PyYAML",
+    "simplejson",
+    "tinkerforge-async",
+    "async-gpib",
+    "prologix-gpib-async"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/PatrickBaus/data_logger"
+"Bug Tracker" = "https://github.com/PatrickBaus/data_logger/issues"
+"Download" = "https://github.com/PatrickBaus/data_logger/releases"
+
+[project.optional-dependencies]
+dev = [
+    "black", "build", "isort", "mypy", "pre-commit", "pylint", "pytest", "twine",
+]
+
+test = [
+    "mypy", "pylint", "pytest",
+]
+
+[tool.pylint.'MESSAGES CONTROL']
+max-line-length = 120
+
+[tool.isort]
+line_length = 120
+profile = "black"
+
+[tool.black]
+line-length = 120
+
+[tool.pytest.ini_options]
+markers = [
+    # conftest.py reorders tests moving slow ones to the end of the list
+    "slow",
+]
+
+[build-system]
+requires = [
+    "setuptools>=61.0",
+    "typing-extensions; python_version <'3.11'",
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = {attr = "data_logger.__version__"}

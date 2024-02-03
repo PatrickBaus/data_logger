@@ -17,10 +17,11 @@
 # ##### END GPL LICENSE BLOCK #####
 
 import asyncio
+import re
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum, unique
-import re
+from typing import TypeAlias
 
 
 class InvalidDataError(ValueError):
@@ -31,7 +32,7 @@ class InvalidDataError(ValueError):
 class SamplingMode(Enum):
     RUN = "r"
     STOP = "st"
-    SAMPLEs = "sn"
+    SAMPLEs = "sn"  # pylint: disable=invalid-name
 
 
 @unique
@@ -42,8 +43,8 @@ class LineTerminator(Enum):
 
 
 class Fluke1590:
-    SamplingMode = SamplingMode
-    LineTerminator = LineTerminator
+    SamplingMode: TypeAlias = SamplingMode
+    LineTerminator: TypeAlias = LineTerminator
     # Regex tested against:
     # "1: 10000.0900 O  7:57:00    11-1-22  "
     # "1: 10000.0879 O  15:02:52    10-31-22  "
@@ -54,13 +55,11 @@ class Fluke1590:
         r"^(\d): (\d+\.?\d*) (.)\s*(?:((?:[01]?\d|2[0-3]):[0-5]\d:[0-5]\d)\s*)?(?:(\d{1,2}-\d{1,2}-\d{2})\s*)?$"
     )
 
-    UNIT_CONVERSION = {
-        "O": "Ω"
-    }
+    UNIT_CONVERSION = {"O": "Ω"}
 
     def __init__(self, connection) -> None:
         self.__conn = connection
-        self.__lock = None
+        self.__lock: asyncio.Lock | None = None
 
     async def read(self) -> str:
         # Strip the separator "\n"
@@ -70,6 +69,8 @@ class Fluke1590:
         await self.__conn.write((cmd + "\n").encode("ascii"))
 
     async def query(self, cmd: str) -> str:
+        if self.__lock is None:
+            raise ConnectionError("Not connected.")
         async with self.__lock:
             await self.write(cmd)
             result = await self.read()
@@ -107,7 +108,7 @@ class Fluke1590:
         return m is not None and int(m.group(1)) > 0
 
     async def read_temperature(self) -> tuple[int, Decimal, str, datetime]:
-        while not (await self.has_data()):
+        while not await self.has_data():
             await asyncio.sleep(0.2)
         result = await self.query("tem")
         try:
@@ -123,13 +124,13 @@ class Fluke1590:
             timestamp = datetime.strptime(date, "%m-%d-%y")
         else:
             timestamp = datetime.utcnow()
-        return int(channel)-1, Decimal(value), self.UNIT_CONVERSION[unit], timestamp
+        return int(channel) - 1, Decimal(value), self.UNIT_CONVERSION[unit], timestamp
 
     async def read_channel(self, channel: int) -> str:
         # The manual states, no more than 5 commands per second (see 8.3 Digital Interface Commands in the manual)
         await asyncio.sleep(1.2)
         result = await self.query(f"tc({channel+1})")
-        result, unit = result.removeprefix(f"{channel+1}: ").split(" ")
+        result, _ = result.removeprefix(f"{channel+1}: ").split(" ")  # (result, unit)
         return result
 
     async def get_id(self) -> str:
@@ -159,10 +160,10 @@ class Fluke1590:
         enabled = await self.query("scrs")
         if not enabled:
             return 0
-        else:
-            time = await self.query("scrt")
-            time = time.removeprefix("SCR SAV TIME (MIN): ")
-            return int(time)*60
+
+        time = await self.query("scrt")
+        time = time.removeprefix("SCR SAV TIME (MIN): ")
+        return int(time) * 60
 
     async def set_time(self, time: datetime) -> None:
         await self.write(f"dat={time.strftime('%m-%d-%y')} & ti={time.strftime('%H:%M:%S')}")
@@ -174,15 +175,19 @@ class Fluke1590:
         date = date.removeprefix("DATE: ").rstrip()
         return datetime.strptime(f"{date} {time}", "%m-%d-%y %H:%M:%S")
 
-    async def get_reference_resistor_value(self) -> tuple[Decimal, Decimal, Decimal, Decimal, Decimal]:
+    async def get_reference_resistor_value(
+        self,
+    ) -> tuple[Decimal, Decimal, Decimal, Decimal, Decimal]:
         # reference 0: external
         # reference 1: 1 Ω
         # reference 2: 10 Ω
         # reference 2: 100 Ω
         # reference 3: 10 kΩ
         refs = [await self.query(f"rr({i})") for i in range(5)]
-        refs[0] = refs[0].removeprefix(f"REF RES 0 (EXT): ")
-        return tuple(Decimal(ref.removeprefix(f"REF RES {i} (INT): ")) for i, ref in enumerate(refs))
+        refs[0] = refs[0].removeprefix("REF RES 0 (EXT): ")
+        results = tuple(Decimal(ref.removeprefix(f"REF RES {i} (INT): ")) for i, ref in enumerate(refs))
+        assert len(results) == 5
+        return results
 
     async def set_line_termination(self, terminator: LineTerminator) -> None:
         await self.write(f"ter={terminator.value}")
@@ -215,7 +220,7 @@ class Fluke1590:
 class Fluke1524:
     def __init__(self, conn):
         self.__conn = conn
-        self.__conn.separator = b'\r'
+        self.__conn.separator = b"\r"
         self.__lock = None
 
     async def read(self):
@@ -234,9 +239,9 @@ class Fluke1524:
     async def connect(self):
         await self.__conn.connect()
         self.__lock = asyncio.Lock()
-        await self.write("")    # Flush input buffer of the device
+        await self.write("")  # Flush input buffer of the device
         try:
-            await asyncio.wait_for(self.read(), timeout=0.1)    # 100ms timeout
+            await asyncio.wait_for(self.read(), timeout=0.1)  # 100ms timeout
         except asyncio.TimeoutError:
             pass
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ##### BEGIN GPL LICENSE BLOCK #####
 #
 # Copyright (C) 2021  Patrick Baus
@@ -55,7 +54,7 @@ class LDT5948:
         await self.__conn.connect()
         self.__lock = asyncio.Lock()
         try:
-            await asyncio.wait_for(self.read(), timeout=0.1)    # 100ms timeout
+            await asyncio.wait_for(self.read(), timeout=0.1)  # 100ms timeout
         except asyncio.TimeoutError:
             pass
 
@@ -97,9 +96,9 @@ class LDT5948:
 
     async def is_enabled(self) -> bool:
         result = await self.query("OUTPUT?")
-        if result == '1':
+        if result == "1":
             result = True
-        elif result == '0':
+        elif result == "0":
             result = False
         else:
             raise ValueError(f"Invalid return value: {result}")
@@ -113,7 +112,9 @@ class LDT5948:
 
     async def get_pid_constants(self) -> tuple[Decimal, Decimal, Decimal]:
         result = await self.query("PID?")
-        return tuple(map(Decimal, result.split(",")))
+        results = tuple(map(Decimal, result.split(",")))
+        assert len(results) == 3
+        return results
 
     async def set_temperature_setpoint(self, value):
         await self.write(f"SET:TEMP {value:.3f}")

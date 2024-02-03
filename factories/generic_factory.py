@@ -7,6 +7,7 @@ class DriverFactory:
     """
     A logger factory to select the correct driver for given logger config.
     """
+
     def __init__(self):
         self.__available_drivers = {}
 
@@ -19,7 +20,7 @@ class DriverFactory:
         cls: Any
             The driver class to register.
         """
-        self.__available_drivers[cls.driver] = cls
+        self.__available_drivers[cls.driver()] = cls
 
     def has(self, driver: str):
         """Returns true if the driver has been registered
@@ -53,5 +54,5 @@ class DriverFactory:
             device = self.__available_drivers[driver]
         except KeyError:
             raise UnknownDriverError(f"No driver available for {driver}") from None
-        else:
-            return device(**kwargs)
+
+        return device(**kwargs)
