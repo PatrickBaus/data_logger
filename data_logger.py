@@ -41,6 +41,7 @@ except ImportError:
 
 DEFAULT_WAIT_TIMEOUT = 10  # in seconds
 LOG_LEVEL = logging.INFO
+ERROR_LOG_FMT = "%(asctime)s %(name)-12s %(levelname)-8s %(message)s"
 
 
 class DataGenerator:
@@ -193,6 +194,7 @@ logging.basicConfig(level=LOG_LEVEL)
 # Set up a file logger for errors
 logfile_handler = logging.FileHandler("errors.log")
 logfile_handler.setLevel(level=logging.ERROR)
+logfile_handler.setFormatter(logging.Formatter(fmt=ERROR_LOG_FMT, datefmt='%Y-%m-%d %H:%M:%S',))
 logging.getLogger().addHandler(logfile_handler)
 
 try:
