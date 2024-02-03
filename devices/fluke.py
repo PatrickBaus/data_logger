@@ -19,7 +19,7 @@
 import asyncio
 import re
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from enum import Enum, unique
 from typing import TypeAlias
 
@@ -218,25 +218,27 @@ class Fluke1590:  # pylint: disable=too-many-public-methods
 
 
 class Fluke1524:
-    def __init__(self, conn):
+    def __init__(self, conn) -> None:
         self.__conn = conn
         self.__conn.separator = b"\r"
-        self.__lock = None
+        self.__lock: asyncio.Lock | None = None
 
-    async def read(self):
+    async def read(self) -> str:
         # Strip the separator "\n"
         return (await self.__conn.read())[:-1]
 
-    async def write(self, cmd):
+    async def write(self, cmd: str) -> None:
         await self.__conn.write(cmd + "\r\n")
 
-    async def query(self, cmd):
+    async def query(self, cmd: str) -> str:
+        if self.__lock is None:
+            raise ConnectionError("Not connected.")
         async with self.__lock:
             await self.write(cmd)
             result = await self.read()
             return result
 
-    async def connect(self):
+    async def connect(self) -> None:
         await self.__conn.connect()
         self.__lock = asyncio.Lock()
         await self.write("")  # Flush input buffer of the device
@@ -245,14 +247,22 @@ class Fluke1524:
         except asyncio.TimeoutError:
             pass
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         await self.__conn.disconnect()
 
-    async def read_sensor1(self):
-        return await self.query("READ? 1")
+    async def read_sensor1(self) -> Decimal:
+        result = await self.query("READ? 1")
+        try:
+            return Decimal(result)
+        except InvalidOperation as exc:
+            raise ValueError(f"Could not convert {result} to Decimal") from exc
 
-    async def read_sensor2(self):
-        return await self.query("READ? 2")
+    async def read_sensor2(self) -> Decimal:
+        result = await self.query("READ? 2")
+        try:
+            return Decimal(result)
+        except InvalidOperation as exc:
+            raise ValueError(f"Could not convert {result} to Decimal") from exc
 
-    async def get_id(self):
+    async def get_id(self) -> str:
         return await self.query("*IDN?")

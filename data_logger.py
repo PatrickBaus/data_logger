@@ -29,6 +29,7 @@ from contextlib import AsyncExitStack
 from datetime import datetime, timezone
 from itertools import chain
 from types import TracebackType
+from typing import cast
 
 import yaml
 
@@ -36,7 +37,6 @@ from _version import __version__
 from factories import device_factory, endpoint_factory
 from logger.logger import DataEvent
 
-from typing import cast
 try:
     from typing import Self  # Python >=3.11
 except ImportError:
@@ -119,7 +119,7 @@ class DataGenerator:
                             self.__logger.error("Error during read.", exc_info=result)
                 if done:  # pylint: disable=no-else-return
                     results = cast(tuple[tuple[DataEvent], ...], results)  # done is false if there are BaseExceptions
-                    yield datetime.utcnow(), tuple(sum(results, ()))
+                    yield datetime.utcnow(), tuple(sum(results, ()))  # flatten the tuple of tuples
                 else:
                     # raise the first exception
                     for result in results:

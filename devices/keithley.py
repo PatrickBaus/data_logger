@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ##### BEGIN GPL LICENSE BLOCK #####
 #
 # Copyright (C) 2021  Patrick Baus
@@ -18,15 +17,15 @@
 # ##### END GPL LICENSE BLOCK #####
 
 import asyncio
-from datetime import datetime, timezone
 import logging
+from datetime import datetime, timezone
 
 
 class KeithleyDMM6500:
     def __init__(self, connection):
         self.__conn = connection
 
-    async def connect(self):
+    async def connect(self) -> None:
         await self.__conn.connect()
         await self.write(":ABORt")
         try:
@@ -34,34 +33,34 @@ class KeithleyDMM6500:
         except asyncio.TimeoutError:
             pass
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         await self.__conn.disconnect()
 
-    async def write(self, cmd):
+    async def write(self, cmd: str) -> None:
         await self.__conn.write((cmd + "\n").encode("ascii"))
 
-    async def __read(self, length=None):
+    async def __read(self, length: int | None = None) -> str:
         # Strip the separator "\n"
         if length is None:  # pylint: disable=no-else-return
             return (await self.__conn.read())[:-1].decode("utf-8")
         else:
-            return (await self.__conn.read(length=length+1))[:-1]
+            return (await self.__conn.read(length=length + 1))[:-1]
 
-    async def query(self, cmd, length=None):
+    async def query(self, cmd: str, length: int | None = None) -> str:
         await self.write(cmd)
         return await self.__read(length)
 
-    async def get_id(self):
+    async def get_id(self) -> str:
         # TODO: Catch AttributeError if not connected
         return await self.query("*IDN?")
 
-    async def set_mode_resistance_2w(self):
+    async def set_mode_resistance_2w(self) -> None:
         await self.write("SENS:FUNC 'RES'")
 
-    async def set_nplc(self, nplc):
+    async def set_nplc(self, nplc) -> None:
         await self.write("SENS:RES:NPLC {nplc}".format(nplc=nplc))
 
-    async def read(self):
+    async def read(self) -> str | None:
         try:
             return await self.__read()
         except asyncio.TimeoutError:
@@ -69,61 +68,59 @@ class KeithleyDMM6500:
 
 
 class Keithley2002:
-    def __init__(self, connection):
+    def __init__(self, connection) -> None:
         self.__conn = connection
         self.__logger = logging.getLogger(__name__)
 
-    async def get_id(self):
+    async def get_id(self) -> str:
         # Catch AttributeError if not connected
         await self.write("*IDN?", test_error=False)
         return await self.read()
 
-    async def get_cal_data(self):
-        cal_date_str = await self.query(':CALibration:PROTected:DATE?')
+    async def get_cal_data(self) -> tuple[datetime, datetime]:
+        cal_date_str = await self.query(":CALibration:PROTected:DATE?")
         cal_datetime = datetime.strptime(cal_date_str, "%Y,%m,%d").replace(tzinfo=timezone.utc)
-        due_date_str = await self.query(':CALibration:PROTected:NDUE?')
+        due_date_str = await self.query(":CALibration:PROTected:NDUE?")
         due_datetime = datetime.strptime(due_date_str, "%Y,%m,%d").replace(tzinfo=timezone.utc)
 
-        #cal_const_str = await self.query(':CALibration:PROTected:DATA?')
+        # cal_const_str = await self.query(':CALibration:PROTected:DATA?')
 
         return cal_datetime, due_datetime
 
-    async def wait_for_data(self):
+    async def wait_for_data(self) -> None:
         try:
-            await self.__conn.wait((1 << 11) | (1 << 14))    # Wait for RQS or TIMO
+            await self.__conn.wait((1 << 11) | (1 << 14))  # Wait for RQS or TIMO
         except asyncio.TimeoutError:
-            self.__logger.warning("Timeout during wait. Is the IbaAUTOPOLL(0x7) bit set for the board? Or the timeout set too low?")
+            self.__logger.warning(
+                "Timeout during wait. Is the IbaAUTOPOLL(0x7) bit set for the board? Or the timeout set too low?"
+            )
             raise
 
-    async def write(self, cmd, test_error=False):
+    async def write(self, cmd: str, test_error: bool = False) -> None:
         await self.__conn.write((cmd + "\n").encode("ascii"))
         if cmd.lower() == "*opc?":
             await self.read()
         elif test_error and not cmd.startswith("*"):
             await self.__conn.write((":SYSTem:ERRor?" + "\n").encode("ascii"))
-            print(await self.read())
+            self.__logger.warning(await self.read())
 
-    async def read(self, length=None):
+    async def read(self, length: int | None = None) -> str:
         # if length is set, return the bytes untouched
         if length is None:  # pylint: disable=no-else-return
             return (await self.__conn.read()).strip().decode("utf-8")
         else:
-            return (await self.__conn.read(length=length+1))[:-1]
+            return (await self.__conn.read(length=length + 1))[:-1]
 
-    async def query(self, cmd, length=None):
+    async def query(self, cmd: str, length: int | None = None) -> str:
         await self.write(cmd, test_error=False)
-        try:
-            result = await self.read(length)
-            return result
-        except Exception:
-            import traceback
-            traceback.print_exc()
+        result = await self.read(length)
+        return result
 
-    async def serial_poll(self):
+    async def serial_poll(self) -> None:
         return await self.__conn.serial_poll()
 
-    async def connect(self):
+    async def connect(self) -> None:
         await self.__conn.connect()
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         await self.__conn.disconnect()

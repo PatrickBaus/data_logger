@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ##### BEGIN GPL LICENSE BLOCK #####
 #
 # Copyright (C) 2021  Patrick Baus
@@ -18,47 +17,61 @@
 # ##### END GPL LICENSE BLOCK #####
 
 import asyncio
+from decimal import Decimal, InvalidOperation
+
 
 class EE07:
     @property
     def connection(self):
         return self.__conn
 
-    def __init__(self, conn):
+    def __init__(self, conn) -> None:
         self.__conn = conn
-        self.__lock = None
+        self.__lock: asyncio.Lock | None = None
 
-    async def read(self):
+    async def read(self) -> str:
         # Strip the separator
         return (await self.__conn.read())[:-1]
 
-    async def write(self, cmd):
+    async def write(self, cmd: str) -> None:
         await self.__conn.write(cmd + "\n")
 
-    async def query(self, cmd):
+    async def query(self, cmd: str) -> str:
+        if self.__lock is None:
+            raise ConnectionError("Not connected.")
         async with self.__lock:
             await self.write(cmd)
             result = await self.read()
             return result
 
-    async def connect(self):
+    async def connect(self) -> None:
         await self.__conn.connect()
         self.__lock = asyncio.Lock()
         await self.write("")  # Flush input buffer of the device
         while "device output buffer not empty":
             try:
-                await asyncio.wait_for(self.read(), timeout=0.1)    # 100ms timeout
+                await asyncio.wait_for(self.read(), timeout=0.1)  # 100ms timeout
             except asyncio.TimeoutError:
                 break
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         await self.__conn.disconnect()
 
-    async def read_sensor1(self):
-        return await self.query("READ? 1")
+    async def read_sensor1(self) -> Decimal:
+        result = await self.query("READ? 1")
 
-    async def read_sensor2(self):
-        return await self.query("READ? 2")
+        try:
+            return Decimal(result)
+        except InvalidOperation as exc:
+            raise ValueError(f"Could not convert {result} to Decimal") from exc
 
-    async def get_id(self):
+    async def read_sensor2(self) -> Decimal:
+        result = await self.query("READ? 2")
+
+        try:
+            return Decimal(result)
+        except InvalidOperation as exc:
+            raise ValueError(f"Could not convert {result} to Decimal") from exc
+
+    async def get_id(self) -> str:
         return await self.query("*IDN?")

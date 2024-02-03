@@ -34,23 +34,21 @@ class LDT5948:
     def connection(self):
         return self.__conn
 
-    def __init__(self, conn):
+    def __init__(self, conn) -> None:
         self.__conn = conn
-        self.__lock = None
+        self.__lock: asyncio.Lock | None = None
 
-    async def read(self):
+    async def read(self) -> str:
         # Strip the separator "\r\n"
         return (await self.__conn.read())[:-2]
 
-    async def __write(self, cmd):
+    async def __write(self, cmd: str) -> None:
         await self.__conn.write(cmd + "\r\n")
 
-    async def write(self, cmd):
-        async with self.__lock:
-            await self.__write(cmd)
-            await self.read()
+    async def write(self, cmd: str) -> None:
+        await self.query(cmd)
 
-    async def connect(self):
+    async def connect(self) -> None:
         await self.__conn.connect()
         self.__lock = asyncio.Lock()
         try:
@@ -58,10 +56,12 @@ class LDT5948:
         except asyncio.TimeoutError:
             pass
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         await self.__conn.disconnect()
 
-    async def query(self, cmd):
+    async def query(self, cmd: str) -> str:
+        if self.__lock is None:
+            raise ConnectionError("Not connected.")
         async with self.__lock:
             await self.__write(cmd)
             result = await self.read()
@@ -95,7 +95,7 @@ class LDT5948:
         await self.write(f"OUTPUT {bool(value)}")
 
     async def is_enabled(self) -> bool:
-        result = await self.query("OUTPUT?")
+        result: str | bool = await self.query("OUTPUT?")
         if result == "1":
             result = True
         elif result == "0":
