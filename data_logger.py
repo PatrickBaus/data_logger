@@ -190,6 +190,11 @@ warnings.simplefilter('always', ResourceWarning)
 # Enable logs from the ip connection. Set to debug for even more info
 logging.basicConfig(level=LOG_LEVEL)
 
+# Set up a file logger for errors
+logfile_handler = logging.FileHandler("errors.log")
+logfile_handler.setLevel(level=logging.ERROR)
+logging.getLogger().addHandler(logfile_handler)
+
 try:
     parser = init_argparse()
     args = parser.parse_args()
