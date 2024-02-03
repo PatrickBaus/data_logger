@@ -194,7 +194,7 @@ logging.basicConfig(level=LOG_LEVEL)
 # Set up a file logger for errors
 logfile_handler = logging.FileHandler("errors.log")
 logfile_handler.setLevel(level=logging.ERROR)
-logfile_handler.setFormatter(logging.Formatter(fmt=ERROR_LOG_FMT, datefmt='%Y-%m-%d %H:%M:%S',))
+logfile_handler.setFormatter(logging.Formatter(fmt=ERROR_LOG_FMT, datefmt='%Y-%m-%d %H:%M:%S'))
 logging.getLogger().addHandler(logfile_handler)
 
 try:
