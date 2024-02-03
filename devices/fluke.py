@@ -42,7 +42,7 @@ class LineTerminator(Enum):
     CRLF = "cl"
 
 
-class Fluke1590:
+class Fluke1590:  # pylint: disable=too-many-public-methods
     SamplingMode: TypeAlias = SamplingMode
     LineTerminator: TypeAlias = LineTerminator
     # Regex tested against:

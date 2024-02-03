@@ -191,7 +191,7 @@ def init_argparse() -> argparse.ArgumentParser:
         "-v",
         "--version",
         action="version",
-        version=f"{parser.prog} version {__version__}",
+        version=f"{arg_parser.prog} version {__version__}",
     )
     arg_parser.add_argument(
         "-c",
