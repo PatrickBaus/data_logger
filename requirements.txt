@@ -1,5 +1,5 @@
 aiofiles~=23.2.1
-aiomqtt~=2.0.0
+aiomqtt~=2.0.1
 pyserial-asyncio>=0.6
 PyYAML~=6.0
 simplejson~=3.19.2
