@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ##### BEGIN GPL LICENSE BLOCK #####
 #
 # Copyright (C) 2021  Patrick Baus
@@ -13,18 +12,20 @@
 # GNU General Public License for more details.
 from __future__ import annotations
 
+import asyncio
+import logging
+
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # ##### END GPL LICENSE BLOCK #####
 
-import asyncio
-import logging
 
 class NotConnectedError(ConnectionError):
     """
     Raised if there is no connection
     """
+
 
 class AsyncEthernet:
     @property
@@ -43,11 +44,11 @@ class AsyncEthernet:
     def is_connected(self):
         return self.__writer is not None and not self.__writer.is_closing()
 
-    def __init__(self, host, port, separator=b'\n', timeout=None, **kwargs):
+    def __init__(self, host, port, separator=b"\n", timeout=None, **kwargs):
         self.__host = host, port
         self.__separator = separator
         self.__kwargs = kwargs
-        self.__timeout = 0.1 if timeout is None else timeout # in seconds
+        self.__timeout = 0.1 if timeout is None else timeout  # in seconds
         self.__reader, self.__writer = None, None
         self.__logger = logging.getLogger(__name__)
 
@@ -73,8 +74,7 @@ class AsyncEthernet:
         if not self.is_connected:
             host, port = self.__host
             self.__reader, self.__writer = await asyncio.wait_for(
-                asyncio.open_connection(host=host, port=port, **self.__kwargs),
-                timeout=self.__timeout
+                asyncio.open_connection(host=host, port=port, **self.__kwargs), timeout=self.__timeout
             )
             self.__logger.info("Ethernet connection established to '%s:%d'", host, port)
 
@@ -86,7 +86,7 @@ class AsyncEthernet:
                     self.__writer.close()
                     await self.__writer.wait_closed()
                 except ConnectionResetError:
-                    pass    # We are no loger connected, so we can ignore it
+                    pass  # We are no loger connected, so we can ignore it
             finally:
                 # We guarantee, that the connection is removed
                 self.__writer, self.__reader = None, None

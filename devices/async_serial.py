@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ##### BEGIN GPL LICENSE BLOCK #####
 #
 # Copyright (C) 2021  Patrick Baus
@@ -22,6 +21,7 @@ import logging
 
 import serial_asyncio
 
+
 class AsyncSerial:
     @property
     def separator(self):
@@ -35,12 +35,12 @@ class AsyncSerial:
     def is_connected(self):
         return self.__writer is not None and not self.__writer.is_closing()
 
-    def __init__(self, tty, separator=b'\n', timeout=None, **kwargs):
+    def __init__(self, tty, separator=b"\n", timeout=None, **kwargs):
         self.__tty = tty
         self.__separator = separator
         self.__lock = None
         self.__kwargs = kwargs
-        self.__timeout = 0.1 if timeout is None else timeout # in seconds
+        self.__timeout = 0.1 if timeout is None else timeout  # in seconds
         self.__reader, self.__writer = None, None
         self.__logger = logging.getLogger(__name__)
 
@@ -68,8 +68,7 @@ class AsyncSerial:
         if not self.is_connected:
             self.__lock = asyncio.Lock()
             self.__reader, self.__writer = await asyncio.wait_for(
-                serial_asyncio.open_serial_connection(url=self.__tty, **self.__kwargs),
-                timeout=self.__timeout
+                serial_asyncio.open_serial_connection(url=self.__tty, **self.__kwargs), timeout=self.__timeout
             )
 
             self.__writer.transport.serial.reset_input_buffer()
@@ -83,7 +82,7 @@ class AsyncSerial:
                     self.__writer.close()
                     await self.__writer.wait_closed()
                 except ConnectionResetError:
-                    pass    # We are no loger connected, so we can ignore it
+                    pass  # We are no loger connected, so we can ignore it
             finally:
                 # We guarantee, that the connection is removed
                 self.__writer, self.__reader = None, None

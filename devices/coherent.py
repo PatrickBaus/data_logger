@@ -18,6 +18,13 @@
 
 import asyncio
 from decimal import Decimal, InvalidOperation
+from types import TracebackType
+from typing import Type
+
+try:
+    from typing import Self  # type: ignore # Python 3.11
+except ImportError:
+    from typing_extensions import Self
 
 
 class Wavemaster:
@@ -28,6 +35,15 @@ class Wavemaster:
     def __init__(self, connection) -> None:
         self.__conn = connection
         self.__lock: asyncio.Lock | None = None
+
+    async def __aenter__(self) -> Self:
+        await self.connect()
+        return self
+
+    async def __aexit__(
+        self, exc_type: Type[BaseException] | None, exc: BaseException | None, traceback: TracebackType | None
+    ) -> None:
+        await self.disconnect()
 
     async def read(self) -> str:
         # Strip the separator
