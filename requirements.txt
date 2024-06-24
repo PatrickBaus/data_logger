@@ -1,7 +1,7 @@
 aiofiles~=23.2.1
 aiomqtt~=2.1.0
 async-gpib~=2.1.2
-prologix-gpib-async~=1.4.13
+prologix-gpib-async~=1.4.14
 pyserial-asyncio>=0.6
 PyYAML~=6.0
 simplejson~=3.19.2
