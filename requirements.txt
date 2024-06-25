@@ -1,4 +1,4 @@
-aiofiles~=23.2.1
+aiofiles~=24.1.0
 aiomqtt~=2.1.0
 async-gpib~=2.1.3
 prologix-gpib-async~=1.4.14
