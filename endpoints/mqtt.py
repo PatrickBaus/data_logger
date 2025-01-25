@@ -158,7 +158,11 @@ class MqttWriter:
                     "Connecting worker to MQTT broker (%s:%i).",
                     *host,
                 )
-                async with aiomqtt.Client(hostname=host[0], port=host[1]) as mqtt_client:
+                async with aiomqtt.Client(
+                    hostname=host[0],
+                    port=host[1],
+                    **self.__mqtt_params.model_dump(exclude={"hosts"}),
+                ) as mqtt_client:
                     while "queue not done":
                         if item is None:
                             # only get new data if we have pushed everything to the broker
