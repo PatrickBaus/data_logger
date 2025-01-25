@@ -1,1 +1,5 @@
-__version__ = "0.9.27"
+"""
+Datalogger version information.
+"""
+
+__version__ = "0.10.0"
