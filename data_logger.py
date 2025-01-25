@@ -85,7 +85,7 @@ class DataGenerator:
         headers = await asyncio.gather(*coros)
         result = [f"# {header}\n" for header in headers if header]
         # drop the microseconds
-        date = datetime.utcnow().replace(tzinfo=timezone.utc).replace(microsecond=0)
+        date = datetime.now(timezone.utc).replace(microsecond=0)
         result.append(f"# Log started at UTC: {date.isoformat()}\n")
 
         # create column names
@@ -119,7 +119,7 @@ class DataGenerator:
                             self.__logger.error("Error during read.", exc_info=result)
                 if done:  # pylint: disable=no-else-return
                     results = cast(tuple[tuple[DataEvent], ...], results)  # done is false if there are BaseExceptions
-                    yield datetime.utcnow(), tuple(sum(results, ()))  # flatten the tuple of tuples
+                    yield datetime.now(timezone.utc), tuple(sum(results, ()))  # flatten the tuple of tuples
                 else:
                     # raise the first exception
                     for result in results:
