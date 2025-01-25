@@ -6,14 +6,75 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import itertools
 import logging
 import re
 from types import TracebackType
 
 import aiomqtt
 import simplejson as json
+from pydantic import BaseModel, field_validator
 
 from logger.logger import DataEvent
+
+# A regular expression to match a hostname with an optional port.
+# It adheres to RFC 1035 (https://www.rfc-editor.org/rfc/rfc1035) and matches ports
+# between 0-65535.
+HOSTNAME_REGEX = (
+    r"^((?=.{1,255}$)[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?(?:\.[0-9A-Za-z](?:(?:["
+    r"0-9A-Za-z]|-){0,61}[0-9A-Za-z])?)*\.?)(?:\:([0-9]{1,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{"
+    r"2}|655[0-2][0-9]|6553[0-5]))?$"
+)
+
+
+class MQTTParams(BaseModel):
+    """
+    Parameters used to connect to the MQTT broker.
+
+    Parameters
+    ----------
+    hosts: List of Tuple of str and int
+        A list of host:port tuples. The list contains the servers of a cluster. If no port is provided it defaults to
+        1883. If port number 0 is provided the default value of 1883 is used.
+    username: str or None
+        The username used for authentication. Set to None if no username is required
+    password: str or None
+        The password used for authentication. Set to None if no username is required
+    """
+
+    hosts: list[tuple[str, int]]
+    username: str | None
+    password: str | None
+
+    @field_validator("hosts", mode="before")
+    @classmethod
+    def ensure_list_of_hosts(cls, value: str) -> list[tuple[str, int]]:
+        """
+        Parse
+        Parameters
+        ----------
+        value: str
+            Either a single hostname:port string or a comma separated list of hostname:port strings.
+
+        Returns
+        -------
+        list of tuple of str and int
+            A list of (hostname, port) tuples.
+        """
+        hosts = value.split(",")
+        result = []
+        for host in hosts:
+            host = host.strip()
+            match = re.search(HOSTNAME_REGEX, host)
+            if match is None:
+                raise ValueError(f"'{value}' is not a valid hostname or list of hostnames.")
+            result.append(
+                (
+                    match.group(1),
+                    int(match.group(2)) if match.group(2) and not match.group(2) == "0" else 1883,
+                )
+            )
+        return result
 
 
 class MqttWriter:
@@ -31,9 +92,12 @@ class MqttWriter:
         """
         return "mqtt"
 
-    def __init__(self, host: str, port: int, number_of_workers: int = 5) -> None:
-        self.__host = str(host)
-        self.__port = int(port)
+    def __init__(self, hosts: str, username: str | None, password: str | None, number_of_workers: int = 5) -> None:
+        self.__mqtt_params = MQTTParams(
+            hosts=hosts,
+            username=username,
+            password=password,
+        )
         self.__number_of_workers = int(number_of_workers)
         self.__write_queue: asyncio.Queue[tuple[datetime.datetime, tuple[DataEvent, ...]]] = asyncio.Queue()
         self.__running_tasks: set[asyncio.Task] = set()
@@ -82,7 +146,7 @@ class MqttWriter:
         error_code = 0  # 0 = success
         item: tuple[datetime.datetime, tuple[DataEvent, ...]] | None = None
         last_reconnect_attempt = asyncio.get_running_loop().time() - reconnect_interval
-        while "not connected":
+        for host in itertools.cycle(self.__mqtt_params.hosts):
             # Wait for at least reconnect_interval before connecting again
             timeout = self._calculate_timeout(last_reconnect_attempt, reconnect_interval)
             if timeout > 0:
@@ -92,10 +156,13 @@ class MqttWriter:
             try:
                 self.__logger.info(
                     "Connecting worker to MQTT broker (%s:%i).",
-                    self.__host,
-                    self.__port,
+                    *host,
                 )
-                async with aiomqtt.Client(hostname=self.__host, port=self.__port) as mqtt_client:
+                async with aiomqtt.Client(
+                    hostname=host[0],
+                    port=host[1],
+                    **self.__mqtt_params.model_dump(exclude={"hosts"}),
+                ) as mqtt_client:
                     while "queue not done":
                         if item is None:
                             # only get new data if we have pushed everything to the broker
@@ -122,8 +189,7 @@ class MqttWriter:
             except ConnectionRefusedError:
                 self.__logger.error(
                     "Connection refused by MQTT server (%s:%i). Retrying.",
-                    self.__host,
-                    self.__port,
+                    *host,
                 )
             except aiomqtt.MqttError as exc:
                 error = re.search(r"\[Errno (\d+)]", str(exc))
@@ -132,14 +198,12 @@ class MqttWriter:
                     if error_code == 111:
                         self.__logger.error(
                             "Connection refused by MQTT server (%s:%i). Retrying.",
-                            self.__host,
-                            self.__port,
+                            *host,
                         )
                     elif error_code == -3:
                         self.__logger.error(
                             "Temporary failure in name resolution of MQTT server (%s:%i). Retrying.",
-                            self.__host,
-                            self.__port,
+                            *host,
                         )
                     else:
                         self.__logger.exception("MQTT Connection error. Retrying.")
@@ -171,4 +235,4 @@ class MqttWriter:
         # Stop running tasks
         for task in self.__running_tasks:
             task.cancel()
-        self.__logger.info("MQTT endpoint at '%s:%i' closed.", self.__host, self.__port)
+        self.__logger.info("MQTT endpoint at '%s' closed.", self.__mqtt_params.hosts)

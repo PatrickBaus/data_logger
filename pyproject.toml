@@ -25,6 +25,7 @@ dynamic = ["version"]
 dependencies = [
     "aiofiles",
     "aiomqtt",
+    "pydantic",
     "pyserial-asyncio",
     "PyYAML",
     "simplejson",
