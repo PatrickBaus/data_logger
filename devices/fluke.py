@@ -18,7 +18,7 @@
 
 import asyncio
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from enum import Enum, unique
 from typing import TypeAlias
@@ -123,7 +123,7 @@ class Fluke1590:  # pylint: disable=too-many-public-methods
         elif date is not None and time is None:
             timestamp = datetime.strptime(date, "%m-%d-%y")
         else:
-            timestamp = datetime.utcnow()
+            timestamp = datetime.now(timezone.utc)
         return int(channel) - 1, Decimal(value), self.UNIT_CONVERSION[unit], timestamp
 
     async def read_channel(self, channel: int) -> str:
