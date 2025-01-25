@@ -69,7 +69,7 @@ class MqttWriter:
             reconnect_interval - (asyncio.get_running_loop().time() - last_reconnect_attempt),
         )
 
-    async def _consumer(self, reconnect_interval: int = 5) -> None:
+    async def _consumer(self, reconnect_interval: int = 5) -> None:  # pylint: disable=too-many-branches
         """
         Pushes the data from the input queue to the MQTT broker. It will make sure,
         that no data is lost if the MQTT broker disconnects.
