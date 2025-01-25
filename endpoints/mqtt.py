@@ -1,3 +1,7 @@
+"""
+MQTT endpoint to push data to an MQTT broker
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -13,6 +17,10 @@ from logger.logger import DataEvent
 
 
 class MqttWriter:
+    """
+    Consumer takes data and writes it to an MQTT broker as JSON dict.
+    """
+
     @classmethod
     def driver(cls) -> str:
         """
