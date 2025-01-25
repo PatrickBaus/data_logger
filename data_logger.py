@@ -29,18 +29,13 @@ from contextlib import AsyncExitStack
 from datetime import datetime, timezone
 from itertools import chain
 from types import TracebackType
-from typing import cast
+from typing import Self, cast
 
 import yaml
 
 from _version import __version__
 from factories import device_factory, endpoint_factory
 from logger.logger import DataEvent
-
-try:
-    from typing import Self  # Python >=3.11
-except ImportError:
-    from typing_extensions import Self
 
 DEFAULT_WAIT_TIMEOUT = 10  # in seconds
 LOG_LEVEL = logging.INFO
