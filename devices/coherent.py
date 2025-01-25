@@ -19,12 +19,7 @@
 import asyncio
 from decimal import Decimal, InvalidOperation
 from types import TracebackType
-from typing import Type
-
-try:
-    from typing import Self  # type: ignore # Python 3.11
-except ImportError:
-    from typing_extensions import Self
+from typing import Self, Type
 
 
 class Wavemaster:
@@ -75,7 +70,7 @@ class Wavemaster:
 
     async def read_wavelength(self) -> Decimal:
         result = await self.query("VAL?")
-        time, wavelength = result.split(",")
+        time, wavelength = result.split(",")  # pylint: disable=unused-variable
         try:
             return Decimal(wavelength)
         except InvalidOperation as exc:
