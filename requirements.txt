@@ -5,5 +5,5 @@ prologix-gpib-async~=1.4.14
 pydantic~=2.10.6
 pyserial-asyncio>=0.6
 PyYAML~=6.0
-simplejson~=3.19.3
+simplejson~=3.20.1
 tinkerforge-async~=1.5.3
