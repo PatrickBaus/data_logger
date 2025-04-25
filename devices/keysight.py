@@ -46,7 +46,7 @@ class Hp3458A:
         return await self.read()
 
     async def beep(self) -> None:
-        await self.__conn.write("BEEP")
+        await self.write("BEEP")
 
     async def acal_dcv(self) -> None:
         self.__logger.debug("Running ACAL DCV. This will take 165 seconds.")
