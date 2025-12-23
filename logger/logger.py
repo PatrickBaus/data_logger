@@ -150,9 +150,9 @@ class LoggingDevice:
     async def post_read(self):
         commands_to_run = []
         for cmd in self.__post_read_commands:
-            if cmd.get("repeat", -1) == 0:
+            if int(cmd.get("repeat", -1)) == 0:
                 continue
-            if cmd.get("delay") and cmd["delay"] < (datetime.now(UTC) - self.__start_time).seconds:
+            if cmd.get("delay") and (cmd["delay"] > (datetime.now(UTC) - self.__start_time).seconds):
                 continue
             if int(cmd.get("repeat", -1)) > 0:
                 cmd["repeat"] = cmd["repeat"] - 1
