@@ -109,6 +109,7 @@ class LoggingDevice:
         self.__post_read_commands = [] if post_read_commands is None else post_read_commands
         self.__base_topic = base_topic if base_topic is not None else ""
         self.__logger = logging.getLogger(__name__)
+        self.__start_time = datetime.now(UTC)
 
     @staticmethod
     async def __batch_run(coros, timeout=1):
@@ -147,7 +148,17 @@ class LoggingDevice:
         return ()
 
     async def post_read(self):
-        await self.__batch_run([self.__device.write(cmd) for cmd in self.__post_read_commands])
+        commands_to_run = []
+        for cmd in self.__post_read_commands:
+            if cmd.get("repeat", -1) == 0:
+                continue
+            if cmd.get("delay") and cmd["delay"] < (datetime.now(UTC) - self.__start_time).seconds:
+                continue
+            if int(cmd.get("repeat", -1)) > 0:
+                cmd["repeat"] = cmd["repeat"] - 1
+            commands_to_run.append(cmd["cmd"])
+
+        await self.__batch_run([self.__device.write(cmd) for cmd in commands_to_run])
 
 
 class GenericLogger(LoggingDevice):
