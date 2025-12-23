@@ -509,11 +509,12 @@ class Fluke1524Logger(LoggingDevice):
         tty: str | None = None,
         vid: int | None = None,
         pid: int | None = None,
+        serial_number: str | None = None,
         *args,
         **kwargs,
     ):
         connection = (
-            AsyncSerial(vid_pid=(vid, pid), timeout=timeout, baudrate=baudrate)
+            AsyncSerial(vid_pid=(vid, pid), serial_number=serial_number, timeout=timeout, baudrate=baudrate)
             if vid is not None and pid is not None
             else AsyncSerial(tty=tty, timeout=timeout, baudrate=baudrate)
         )
