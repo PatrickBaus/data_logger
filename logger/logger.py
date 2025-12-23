@@ -39,6 +39,7 @@ from devices import (
     Fluke1524,
     Fluke1590,
     Hp3458A,
+    Keithley26xxB,
     Keithley2002,
     KeithleyDMM6500,
     Keysight34470A,
@@ -413,6 +414,37 @@ class Keithley2002ScannerLogger(Keithley2002Logger):
     async def read(self) -> tuple[DataEvent, ...]:
         # pylint: disable=consider-using-generator
         return tuple([await self.query_channel(channel) for channel in self.__active_channels])
+
+
+class Keithley26xxBLogger(LoggingDevice):
+    @classmethod
+    def driver(cls) -> str:
+        """
+        Returns
+        -------
+        str
+            The driver that identifies it to the factory
+        """
+        return "k26xxb"
+
+    def __init__(self, host: str, port: int, timeout, *args, **kwargs):
+        connection = AsyncEthernet(host=host, port=port, timeout=timeout)
+        device = Keithley26xxB(connection=connection)
+
+        super().__init__(device, *args, **kwargs)
+
+    async def get_log_header(self):
+        cal_date, cal_due_date = await self.device.get_cal_data()
+        fw_version = await self.device.get_fw_version()
+        sn = await self.device.get_serial_number()
+        model = await self.device.get_model()
+        return f"K{model} Serial {sn} FW {fw_version} Cal date ChA={cal_date[0]}, ChB={cal_date[1]}; Next Cal due ChA={cal_due_date[0]}, ChB={cal_due_date[1]}"
+
+    async def read(self) -> tuple[DataEvent, ...]:
+        await super().read()
+        data = await self.device.query("print(smua.measure.r())")  # get a *new* 8 byte double from the instrument
+
+        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=Decimal(data), unit=""),)
 
 
 class TinkerforgeLogger(LoggingDevice):

@@ -6,6 +6,7 @@ from logger import (
     EE07Logger,
     Fluke1524Logger,
     Fluke1590Logger,
+    Keithley26xxBLogger,
     Keithley2002Logger,
     Keithley2002ScannerLogger,
     KeithleyDMM6500Logger,
@@ -24,6 +25,7 @@ device_factory.register(cls=Keysight34470ALogger)
 device_factory.register(cls=Keithley2002Logger)
 device_factory.register(cls=Keithley2002ScannerLogger)
 device_factory.register(cls=KeithleyDMM6500Logger)
+device_factory.register(cls=Keithley26xxBLogger)
 device_factory.register(cls=EE07Logger)
 device_factory.register(cls=Fluke1524Logger)
 device_factory.register(cls=Fluke1590Logger)
