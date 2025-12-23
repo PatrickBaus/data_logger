@@ -3,6 +3,7 @@ from .logger import (
     EE07Logger,
     Fluke1524Logger,
     Fluke1590Logger,
+    Keithley26xxBLogger,
     Keithley2002Logger,
     Keithley2002ScannerLogger,
     KeithleyDMM6500Logger,

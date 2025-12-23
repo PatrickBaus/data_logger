@@ -18,7 +18,7 @@
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 
 class KeithleyDMM6500:
@@ -124,3 +124,60 @@ class Keithley2002:
 
     async def disconnect(self) -> None:
         await self.__conn.disconnect()
+
+
+class Keithley26xxB:
+    def __init__(self, connection) -> None:
+        self.__conn = connection
+        self.__logger = logging.getLogger(__name__)
+
+    async def connect(self) -> None:
+        await self.__conn.connect()
+        try:
+            await asyncio.wait_for(self.read(), timeout=0.1)  # 100ms timeout
+        except asyncio.TimeoutError:
+            pass
+
+    async def disconnect(self) -> None:
+        await self.__conn.disconnect()
+
+    async def get_id(self) -> str:
+        # Catch AttributeError if not connected
+        return await self.query("*IDN?")
+
+    async def get_cal_data(self) -> tuple[tuple[datetime, datetime], tuple[datetime, datetime]]:
+        cal_date_str = await self.query("print(smua.cal.date)"), await self.query("print(smub.cal.date)")
+        cal_datetime = tuple(map(lambda x: datetime.fromtimestamp(x, UTC), map(float, cal_date_str)))
+        due_date_str = await self.query("print(smua.cal.due)"), await self.query("print(smub.cal.due)")
+        due_datetime = tuple(map(lambda x: datetime.fromtimestamp(x, UTC), map(float, due_date_str)))
+
+        return cal_datetime, due_datetime
+
+    async def get_fw_version(self) -> str:
+        return await self.query("print(localnode.revision)")
+
+    async def get_serial_number(self) -> str:
+        return await self.query("print(localnode.serialno)")
+
+    async def get_model(self) -> str:
+        return await self.query("print(localnode.model)")
+
+    async def write(self, cmd: str, test_error: bool = False) -> None:
+        await self.__conn.write((cmd + "\n").encode("ascii"))
+
+    async def __read(self, length: int | None = None) -> str:
+        # Strip the separator "\n"
+        if length is None:  # pylint: disable=no-else-return
+            return (await self.__conn.read())[:-1].decode("utf-8")
+        else:
+            return (await self.__conn.read(length=length + 1))[:-1]
+
+    async def query(self, cmd: str, length: int | None = None) -> str:
+        await self.write(cmd)
+        return await self.__read(length)
+
+    async def read(self) -> str | None:
+        try:
+            return await self.__read()
+        except asyncio.TimeoutError:
+            return None
