@@ -21,7 +21,7 @@ import asyncio
 import logging
 import struct
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -532,7 +532,7 @@ class Fluke1590Logger(LoggingDevice):
         await self.device.set_timestamp(date=True, time=True)  # print date and time with each reading
         await self.device.set_mode(self.device.SamplingMode.RUN)
         await self.device.set_screensaver(5 * 60)
-        await self.device.set_time(datetime.utcnow())
+        await self.device.set_time(datetime.now(UTC))
         await self.device.set_sample_interval(4)
         await self.device.set_conversion_time(2)
         await self.device.set_integration_time(4)
