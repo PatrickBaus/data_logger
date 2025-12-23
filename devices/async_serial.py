@@ -19,7 +19,15 @@
 import asyncio
 import logging
 
+import serial.tools.list_ports
 import serial_asyncio
+
+
+def find_device_by_vid(vid: int, pid: int) -> str | None:
+    for port in serial.tools.list_ports.comports():
+        if port.vid == vid and port.pid == pid:
+            return port.device
+    return None
 
 
 class AsyncSerial:
@@ -35,8 +43,12 @@ class AsyncSerial:
     def is_connected(self):
         return self.__writer is not None and not self.__writer.is_closing()
 
-    def __init__(self, tty, separator=b"\n", timeout=None, **kwargs):
-        self.__tty = tty
+    def __init__(
+        self, tty: str | None = None, vid_pid: tuple[int, int] | None = None, separator=b"\n", timeout=None, **kwargs
+    ):
+        self.__tty = find_device_by_vid(*vid_pid) if vid_pid is not None else tty
+        if self.__tty is None:
+            raise ValueError("Either supply a tty string or a VID/PID tuple.")
         self.__separator = separator
         self.__lock = None
         self.__kwargs = kwargs

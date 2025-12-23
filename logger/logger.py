@@ -502,8 +502,21 @@ class Fluke1524Logger(LoggingDevice):
         """
         return "fluke1524"
 
-    def __init__(self, tty: str, timeout: int, baudrate: int, *args, **kwargs):
-        connection = AsyncSerial(tty=tty, timeout=timeout, baudrate=baudrate)
+    def __init__(
+        self,
+        timeout: int,
+        baudrate: int,
+        tty: str | None = None,
+        vid: int | None = None,
+        pid: int | None = None,
+        *args,
+        **kwargs,
+    ):
+        connection = (
+            AsyncSerial(vid_pid=(vid, pid), timeout=timeout, baudrate=baudrate)
+            if vid is not None and pid is not None
+            else AsyncSerial(tty=tty, timeout=timeout, baudrate=baudrate)
+        )
         device = Fluke1524(connection)
         super().__init__(device, *args, **kwargs)
 
