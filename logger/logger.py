@@ -284,8 +284,22 @@ class LDT5948Logger(LoggingDevice):
         """
         return "ldt5948"
 
-    def __init__(self, tty: str, timeout: int, baudrate: int, *args, **kwargs):
-        connection = AsyncSerial(tty=tty, timeout=timeout, baudrate=baudrate)
+    def __init__(
+        self,
+        timeout: int,
+        baudrate: int,
+        tty: str | None = None,
+        vid: int | None = None,
+        pid: int | None = None,
+        serial_number: str | None = None,
+        *args,
+        **kwargs,
+    ):
+        connection = (
+            AsyncSerial(vid_pid=(vid, pid), serial_number=serial_number, timeout=timeout, baudrate=baudrate)
+            if vid is not None and pid is not None
+            else AsyncSerial(tty=tty, timeout=timeout, baudrate=baudrate)
+        )
         device = LDT5948(connection)
         super().__init__(device, *args, **kwargs)
 
@@ -595,8 +609,22 @@ class EE07Logger(LoggingDevice):
         """
         return "ee07"
 
-    def __init__(self, tty: str, timeout: int, baudrate: int, *args, **kwargs):
-        connection = AsyncSerial(tty=tty, timeout=timeout, baudrate=baudrate)
+    def __init__(
+        self,
+        timeout: int,
+        baudrate: int,
+        tty: str | None = None,
+        vid: int | None = None,
+        pid: int | None = None,
+        serial_number: str | None = None,
+        *args,
+        **kwargs,
+    ):
+        connection = (
+            AsyncSerial(vid_pid=(vid, pid), serial_number=serial_number, timeout=timeout, baudrate=baudrate)
+            if vid is not None and pid is not None
+            else AsyncSerial(tty=tty, timeout=timeout, baudrate=baudrate)
+        )
         device = EE07(connection)
         super().__init__(device, *args, **kwargs)
 
