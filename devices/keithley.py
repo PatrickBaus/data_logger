@@ -18,6 +18,7 @@
 
 import asyncio
 import logging
+import typing
 from datetime import UTC, datetime, timezone
 
 
@@ -58,7 +59,7 @@ class KeithleyDMM6500:
         await self.write("SENS:FUNC 'RES'")
 
     async def set_nplc(self, nplc) -> None:
-        await self.write("SENS:RES:NPLC {nplc}".format(nplc=nplc))
+        await self.write(f"SENS:RES:NPLC {nplc}")
 
     async def read(self) -> str | None:
         try:
@@ -129,7 +130,6 @@ class Keithley2002:
 class Keithley26xxB:
     def __init__(self, connection) -> None:
         self.__conn = connection
-        self.__logger = logging.getLogger(__name__)
 
     async def connect(self) -> None:
         await self.__conn.connect()
@@ -148,8 +148,10 @@ class Keithley26xxB:
     async def get_cal_data(self) -> tuple[tuple[datetime, datetime], tuple[datetime, datetime]]:
         cal_date_str = await self.query("print(smua.cal.date)"), await self.query("print(smub.cal.date)")
         cal_datetime = tuple(map(lambda x: datetime.fromtimestamp(x, UTC), map(float, cal_date_str)))
+        cal_datetime = typing.cast(tuple[datetime, datetime], cal_datetime)
         due_date_str = await self.query("print(smua.cal.due)"), await self.query("print(smub.cal.due)")
         due_datetime = tuple(map(lambda x: datetime.fromtimestamp(x, UTC), map(float, due_date_str)))
+        due_datetime = typing.cast(tuple[datetime, datetime], due_datetime)
 
         return cal_datetime, due_datetime
 
