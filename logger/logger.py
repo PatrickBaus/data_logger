@@ -151,12 +151,13 @@ class LoggingDevice:
         commands_to_run = []
         for cmd in self.__post_read_commands:
             delay = eval(cmd["delay"]) if cmd.get("delay") else None
-            if int(cmd.get("repeat", -1)) == 0:
+            number_of_repetitions = int(cmd.get("repeat", -1))
+            if number_of_repetitions == 0:
                 continue
-            if delay and (delay > (datetime.now(UTC) - self.__start_time).seconds):
+            if delay and (delay > (datetime.now(UTC) - self.__start_time).total_seconds()):
                 continue
-            if int(cmd.get("repeat", -1)) > 0:
-                cmd["repeat"] = cmd["repeat"] - 1
+            if number_of_repetitions > 0:
+                cmd["repeat"] = number_of_repetitions - 1
             commands_to_run.append(cmd["cmd"])
 
         await self.__batch_run([self.__device.write(cmd) for cmd in commands_to_run])
