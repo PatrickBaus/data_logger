@@ -288,11 +288,11 @@ class LDT5948Logger(LoggingDevice):
         self,
         timeout: int,
         baudrate: int,
+        *args,
         tty: str | None = None,
         vid: int | None = None,
         pid: int | None = None,
         serial_number: str | None = None,
-        *args,
         **kwargs,
     ):
         connection = (
@@ -309,8 +309,9 @@ class LDT5948Logger(LoggingDevice):
             ki,
             kd,
         ) = await self.device.get_pid_constants()  # pylint: disable=invalid-name
+        uptime = await self.device.query("TIME?")
 
-        return f"LDT5948 PID constants Kp={kp:.2f}; Ki={ki:.3f}; Kd={kd:.3f}"
+        return f"LDT5948 {await self.device.get_id()}; PID constants Kp={kp:.2f}; Ki={ki:.3f}; Kd={kd:.3f}; Uptime={uptime}"
 
     async def read(self) -> tuple[DataEvent, DataEvent, DataEvent, DataEvent]:
         await super().read()
@@ -452,7 +453,7 @@ class Keithley26xxBLogger(LoggingDevice):
         fw_version = await self.device.get_fw_version()
         sn = await self.device.get_serial_number()
         model = await self.device.get_model()
-        return f"K{model} Serial {sn} FW {fw_version} Cal date ChA={cal_date[0]}, ChB={cal_date[1]}; Next Cal due ChA={cal_due_date[0]}, ChB={cal_due_date[1]}"
+        return f"K{model} Serial {sn}; FW {fw_version}; Cal date ChA={cal_date[0]}; ChB={cal_date[1]}; Next Cal due ChA={cal_due_date[0]}; ChB={cal_due_date[1]}"
 
     async def read(self) -> tuple[DataEvent, ...]:
         await super().read()
@@ -488,7 +489,7 @@ class TinkerforgeLogger(LoggingDevice):
         except ConnectionError as exc:
             try:
                 await self.device.connect()
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 logging.getLogger(__name__).exception("Error during re-connect attempt to Tinkerforge Brick daemon.")
             raise asyncio.TimeoutError("Connection to Tinkerforge bricklet timed out. Reconnecting.") from exc
         return (
@@ -520,11 +521,11 @@ class Fluke1524Logger(LoggingDevice):
         self,
         timeout: int,
         baudrate: int,
+        *args,
         tty: str | None = None,
         vid: int | None = None,
         pid: int | None = None,
         serial_number: str | None = None,
-        *args,
         **kwargs,
     ):
         connection = (
@@ -613,11 +614,11 @@ class EE07Logger(LoggingDevice):
         self,
         timeout: int,
         baudrate: int,
+        *args,
         tty: str | None = None,
         vid: int | None = None,
         pid: int | None = None,
         serial_number: str | None = None,
-        *args,
         **kwargs,
     ):
         connection = (
