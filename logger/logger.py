@@ -457,9 +457,9 @@ class Keithley26xxBLogger(LoggingDevice):
 
     async def read(self) -> tuple[DataEvent, ...]:
         await super().read()
-        data = await self.device.query("print(smua.measure.r())")  # get a *new* 8 byte double from the instrument
+        data = await self.device.query("print(smua.measure.i())")
 
-        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=Decimal(data), unit=""),)
+        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=Decimal(data), unit="A"),)
 
 
 class TinkerforgeLogger(LoggingDevice):
@@ -557,6 +557,9 @@ class Fluke1524Logger(LoggingDevice):
             ),
         )
 
+    async def get_log_header(self):
+        return f"{await self.device.get_id()}"
+
 
 class Fluke1590Logger(LoggingDevice):
     @classmethod
@@ -648,6 +651,9 @@ class EE07Logger(LoggingDevice):
                 unit="°C",
             ),
         )
+
+    async def get_log_header(self):
+        return f"{await self.device.get_id()}"
 
 
 class WavemasterLogger(LoggingDevice):
