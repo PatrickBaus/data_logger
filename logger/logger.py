@@ -457,9 +457,9 @@ class Keithley26xxBLogger(LoggingDevice):
 
     async def read(self) -> tuple[DataEvent, ...]:
         await super().read()
-        data = await self.device.query("print(smua.measure.r())")  # get a *new* 8 byte double from the instrument
+        data = await self.device.query("print(smua.measure.i())")
 
-        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=Decimal(data), unit=""),)
+        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=Decimal(data), unit="A"),)
 
 
 class TinkerforgeLogger(LoggingDevice):
