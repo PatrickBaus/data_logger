@@ -309,8 +309,9 @@ class LDT5948Logger(LoggingDevice):
             ki,
             kd,
         ) = await self.device.get_pid_constants()  # pylint: disable=invalid-name
+        uptime = await self.device.query("TIME?")
 
-        return f"LDT5948 PID constants Kp={kp:.2f}; Ki={ki:.3f}; Kd={kd:.3f}"
+        return f"LDT5948 {await self.device.get_id()}; PID constants Kp={kp:.2f}; Ki={ki:.3f}; Kd={kd:.3f}; Uptime={uptime}"
 
     async def read(self) -> tuple[DataEvent, DataEvent, DataEvent, DataEvent]:
         await super().read()
@@ -488,7 +489,7 @@ class TinkerforgeLogger(LoggingDevice):
         except ConnectionError as exc:
             try:
                 await self.device.connect()
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 logging.getLogger(__name__).exception("Error during re-connect attempt to Tinkerforge Brick daemon.")
             raise asyncio.TimeoutError("Connection to Tinkerforge bricklet timed out. Reconnecting.") from exc
         return (
