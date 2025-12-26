@@ -112,15 +112,22 @@ class LDT5948:
 
     async def get_pid_constants(self) -> tuple[Decimal, Decimal, Decimal]:
         result = await self.query("PID?")
-        results = tuple(map(Decimal, result.split(",")))
-        assert len(results) == 3
-        return results
+        try:
+            results = tuple(map(Decimal, result.split(",")))
+            assert len(results) == 3
+            return results
+        except InvalidOperation as exc:
+            raise ValueError(f"Could not convert {result} to decimal") from exc
 
     async def set_temperature_setpoint(self, value):
         await self.write(f"SET:TEMP {value:.3f}")
 
     async def get_temperature_setpoint(self) -> Decimal:
-        return Decimal(await self.query("SET:TEMP?"))
+        result = await self.query("SET:TEMP?")
+        try:
+            return Decimal(result)
+        except InvalidOperation as exc:
+            raise ValueError(f"Could not convert {result} to decimal") from exc
 
     async def set_mode(self, mode):
         await self.write(f"MODE {mode.value}")
