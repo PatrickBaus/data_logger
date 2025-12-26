@@ -18,7 +18,6 @@
 
 import asyncio
 import logging
-import typing
 from datetime import UTC, datetime, timezone
 
 
@@ -148,10 +147,10 @@ class Keithley26xxB:
     async def get_cal_data(self) -> tuple[tuple[datetime, datetime], tuple[datetime, datetime]]:
         cal_date_str = await self.query("print(smua.cal.date)"), await self.query("print(smub.cal.date)")
         cal_datetime = tuple(map(lambda x: datetime.fromtimestamp(x, UTC), map(float, cal_date_str)))
-        cal_datetime = typing.cast(tuple[datetime, datetime], cal_datetime)
+        assert len(cal_datetime) == 2
         due_date_str = await self.query("print(smua.cal.due)"), await self.query("print(smub.cal.due)")
         due_datetime = tuple(map(lambda x: datetime.fromtimestamp(x, UTC), map(float, due_date_str)))
-        due_datetime = typing.cast(tuple[datetime, datetime], due_datetime)
+        assert len(due_datetime) == 2
 
         return cal_datetime, due_datetime
 
