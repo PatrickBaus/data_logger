@@ -557,6 +557,9 @@ class Fluke1524Logger(LoggingDevice):
             ),
         )
 
+    async def get_log_header(self):
+        return f"{await self.device.get_id()}"
+
 
 class Fluke1590Logger(LoggingDevice):
     @classmethod
@@ -648,6 +651,9 @@ class EE07Logger(LoggingDevice):
                 unit="°C",
             ),
         )
+
+    async def get_log_header(self):
+        return f"{await self.device.get_id()}"
 
 
 class WavemasterLogger(LoggingDevice):
