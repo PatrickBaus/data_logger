@@ -288,11 +288,11 @@ class LDT5948Logger(LoggingDevice):
         self,
         timeout: int,
         baudrate: int,
+        *args,
         tty: str | None = None,
         vid: int | None = None,
         pid: int | None = None,
         serial_number: str | None = None,
-        *args,
         **kwargs,
     ):
         connection = (
@@ -452,7 +452,7 @@ class Keithley26xxBLogger(LoggingDevice):
         fw_version = await self.device.get_fw_version()
         sn = await self.device.get_serial_number()
         model = await self.device.get_model()
-        return f"K{model} Serial {sn} FW {fw_version} Cal date ChA={cal_date[0]}, ChB={cal_date[1]}; Next Cal due ChA={cal_due_date[0]}, ChB={cal_due_date[1]}"
+        return f"K{model} Serial {sn}; FW {fw_version}; Cal date ChA={cal_date[0]}; ChB={cal_date[1]}; Next Cal due ChA={cal_due_date[0]}; ChB={cal_due_date[1]}"
 
     async def read(self) -> tuple[DataEvent, ...]:
         await super().read()
@@ -520,11 +520,11 @@ class Fluke1524Logger(LoggingDevice):
         self,
         timeout: int,
         baudrate: int,
+        *args,
         tty: str | None = None,
         vid: int | None = None,
         pid: int | None = None,
         serial_number: str | None = None,
-        *args,
         **kwargs,
     ):
         connection = (
@@ -613,11 +613,11 @@ class EE07Logger(LoggingDevice):
         self,
         timeout: int,
         baudrate: int,
+        *args,
         tty: str | None = None,
         vid: int | None = None,
         pid: int | None = None,
         serial_number: str | None = None,
-        *args,
         **kwargs,
     ):
         connection = (
