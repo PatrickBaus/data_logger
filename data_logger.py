@@ -128,6 +128,9 @@ class DataGenerator:
                 self.__logger.error("Sensor read invalid data. Retrying.")
             except asyncio.TimeoutError:
                 self.__logger.error("Timeout during read. Retrying.")
+            except OSError as e:
+                if e.errno == 110:
+                    self.__logger.error("Network unreachable. Retrying.")
 
 
 class LoggingDaemon:
