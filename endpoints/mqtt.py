@@ -256,7 +256,9 @@ class MqttWriter:
         except asyncio.TimeoutError:
             self.__logger.error("Timeout while flushing the MQTT writer.")
 
-        # Stop running tasks
+        # Stop running tasks and wait for them, so they are not destroyed while pending
         for task in self.__running_tasks:
             task.cancel()
+        await asyncio.gather(*self.__running_tasks, return_exceptions=True)
+        self.__running_tasks.clear()
         self.__logger.info("MQTT endpoint at '%s' closed.", self.__mqtt_params.hosts)
