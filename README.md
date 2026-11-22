@@ -2,35 +2,35 @@
 
 [Full report](https://htmlpreview.github.io/?https://github.com/PatrickBaus/data_logger/blob/python-coverage-comment-action-data/htmlcov/index.html)
 
-| Name                                |    Stmts |     Miss |   Branch |   BrPart |   Cover |   Missing |
-|------------------------------------ | -------: | -------: | -------: | -------: | ------: | --------: |
-| \_version.py                        |        1 |        0 |        0 |        0 |    100% |           |
-| data\_logger.py                     |      171 |        4 |       26 |        2 |     97% |114, 374, 378, 384 |
-| devices/\_\_init\_\_.py             |        8 |        0 |        0 |        0 |    100% |           |
-| devices/coherent.py                 |       44 |       26 |        0 |        0 |     41% |30, 33-35, 38-39, 44, 47, 50, 53, 56-62, 65, 68-73, 76-77 |
-| devices/connections/\_\_init\_\_.py |        6 |        0 |        0 |        0 |    100% |           |
-| devices/connections/base.py         |       76 |        3 |       14 |        3 |     93% |95-\>exit, 139, 160, 169 |
-| devices/connections/ethernet.py     |       47 |        2 |        0 |        0 |     96% |     73-74 |
-| devices/connections/gpib.py         |       29 |        0 |        0 |        0 |    100% |           |
-| devices/connections/prologix.py     |       33 |        0 |        0 |        0 |    100% |           |
-| devices/connections/serial.py       |       72 |        6 |       18 |        0 |     93% |138-139, 155-156, 161-162 |
-| devices/e\_plus\_e.py               |       41 |       23 |        0 |        0 |     44% |28, 36, 39, 42, 45-51, 54, 57-62, 65-70, 73 |
-| devices/errors.py                   |        1 |        0 |        0 |        0 |    100% |           |
-| devices/fluke.py                    |      158 |       63 |       12 |        1 |     61% |68, 71, 80, 83, 86, 89, 92, 95, 98, 107, 132-135, 139-141, 144, 155-158, 170, 173-177, 187-191, 194, 197-199, 211, 214-218, 228, 231, 234, 237-242, 245, 248-252, 255-259, 262 |
-| devices/ilx.py                      |       94 |       43 |        4 |        0 |     52% |37, 58, 64, 67-71, 74-78, 81-85, 91-98, 101-104, 115, 118-122, 125, 128, 131, 134-138 |
-| devices/keithley.py                 |      115 |       54 |        6 |        2 |     52% |32-37, 40, 43, 46, 61, 64, 67, 70-73, 86-93, 98, 104-107, 114-116, 126-127, 144, 147, 155-159, 162, 166, 169-176, 179, 182, 185, 188, 191, 205-208 |
-| devices/keysight.py                 |      131 |       67 |        2 |        0 |     48% |35, 38-39, 42, 48, 51-55, 58-63, 66-71, 74-79, 82-87, 106-109, 112, 122-129, 132, 135, 150, 153, 156-164, 178-180, 188-192, 195, 198, 201, 207, 210 |
-| endpoints/\_\_init\_\_.py           |        3 |        0 |        0 |        0 |    100% |           |
-| endpoints/filewriter.py             |       66 |        5 |       14 |        2 |     91% |74-\>exit, 77-78, 87, 111-112 |
-| endpoints/mqtt.py                   |      113 |        2 |       28 |        1 |     98% |178-\>exit, 254-255 |
-| errors.py                           |        4 |        0 |        0 |        0 |    100% |           |
-| factories/\_\_init\_\_.py           |        3 |        0 |        0 |        0 |    100% |           |
-| factories/device\_factory.py        |       16 |        0 |        0 |        0 |    100% |           |
-| factories/endpoint\_factory.py      |        5 |        0 |        0 |        0 |    100% |           |
-| factories/generic\_factory.py       |       17 |        3 |        0 |        0 |     82% | 40, 65-66 |
-| logger/\_\_init\_\_.py              |        2 |        0 |        0 |        0 |    100% |           |
-| logger/logger.py                    |      350 |      127 |       32 |        0 |     66% |225-227, 243, 298-300, 303, 306, 309-313, 316, 343-346, 369-371, 374-381, 406-409, 442-445, 448-452, 485-487, 490-497, 503-516, 565-566, 569-576, 585-592, 613-615, 630-633, 636-640, 646-649, 656, 659, 662, 665, 668, 671, 686-688, 692-701, 734-736, 740-742, 760, 776-779, 782-784, 795-803, 828-830, 833-835, 853, 858-860 |
-| **TOTAL**                           | **1606** |  **428** |  **156** |   **11** | **74%** |           |
+| Name                                |    Stmts |     Miss |   Branch |   BrPart |    Cover |   Missing |
+|------------------------------------ | -------: | -------: | -------: | -------: | -------: | --------: |
+| \_version.py                        |        1 |        0 |        0 |        0 |     100% |           |
+| data\_logger.py                     |      169 |        0 |       24 |        0 |     100% |           |
+| devices/\_\_init\_\_.py             |        8 |        0 |        0 |        0 |     100% |           |
+| devices/coherent.py                 |       44 |        0 |        0 |        0 |     100% |           |
+| devices/connections/\_\_init\_\_.py |        6 |        0 |        0 |        0 |     100% |           |
+| devices/connections/base.py         |       76 |        0 |       14 |        0 |     100% |           |
+| devices/connections/ethernet.py     |       47 |        0 |        0 |        0 |     100% |           |
+| devices/connections/gpib.py         |       29 |        0 |        0 |        0 |     100% |           |
+| devices/connections/prologix.py     |       33 |        0 |        0 |        0 |     100% |           |
+| devices/connections/serial.py       |       72 |        0 |       18 |        0 |     100% |           |
+| devices/e\_plus\_e.py               |       41 |        0 |        0 |        0 |     100% |           |
+| devices/errors.py                   |        1 |        0 |        0 |        0 |     100% |           |
+| devices/fluke.py                    |      158 |        0 |       12 |        0 |     100% |           |
+| devices/ilx.py                      |       94 |        0 |        4 |        0 |     100% |           |
+| devices/keithley.py                 |      115 |        0 |        6 |        0 |     100% |           |
+| devices/keysight.py                 |      131 |        0 |        2 |        0 |     100% |           |
+| endpoints/\_\_init\_\_.py           |        3 |        0 |        0 |        0 |     100% |           |
+| endpoints/filewriter.py             |       66 |        0 |       14 |        0 |     100% |           |
+| endpoints/mqtt.py                   |      113 |        0 |       28 |        0 |     100% |           |
+| errors.py                           |        4 |        0 |        0 |        0 |     100% |           |
+| factories/\_\_init\_\_.py           |        3 |        0 |        0 |        0 |     100% |           |
+| factories/device\_factory.py        |       16 |        0 |        0 |        0 |     100% |           |
+| factories/endpoint\_factory.py      |        5 |        0 |        0 |        0 |     100% |           |
+| factories/generic\_factory.py       |       17 |        0 |        0 |        0 |     100% |           |
+| logger/\_\_init\_\_.py              |        2 |        0 |        0 |        0 |     100% |           |
+| logger/logger.py                    |      350 |        0 |       32 |        0 |     100% |           |
+| **TOTAL**                           | **1604** |    **0** |  **154** |    **0** | **100%** |           |
 
 
 ## Setup coverage badge
