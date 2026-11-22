@@ -98,7 +98,19 @@ class AsyncSerial:  # pylint: disable=too-many-instance-attributes
     def __str__(self) -> str:
         return f"AsyncSerial({self.__tty})"
 
-    async def read(self, length=None):
+    async def read(self, length: int | None = None) -> str:
+        """
+        Read until the separator or, if `length` is given, exactly `length` bytes.
+
+        Raises
+        ------
+        NotConnectedError
+            If the connection is not open
+        ConnectionError
+            If the port was closed, for example because the adapter was unplugged
+        TimeoutError
+            If no data arrived in time
+        """
         if self.is_connected:
             if length is None:
                 coro = self.__reader.readuntil(self.__separator)
@@ -110,15 +122,30 @@ class AsyncSerial:  # pylint: disable=too-many-instance-attributes
             # TODO: raise custom error
             pass
 
-    async def write(self, cmd):
+    async def write(self, cmd: str) -> None:
+        """
+        Encode and write the string and wait until it is sent.
+
+        Raises
+        ------
+        NotConnectedError
+            If the connection is not open
+        """
         if self.is_connected:
             self.__writer.write(cmd.encode())
             await asyncio.wait_for(self.__writer.drain(), timeout=self.__timeout)
         else:
             # TODO: raise custom error
             pass
+    async def connect(self) -> None:
+        """
+        Open the connection, unless it is already open.
 
-    async def connect(self):
+        Raises
+        ------
+        ConnectionError
+            If no device with the configured VID/PID is attached
+        """
         if not self.is_connected:
             self.__lock = asyncio.Lock()
             self.__reader, self.__writer = await asyncio.wait_for(
