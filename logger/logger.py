@@ -19,8 +19,10 @@
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import logging
+import operator
 import struct
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timezone
@@ -46,6 +48,7 @@ from devices import (
     KeithleyDMM6500,
     Keysight34470A,
 )
+from errors import ConfigurationError
 
 
 @dataclass(frozen=True)
@@ -89,6 +92,100 @@ def to_decimal(value: Any) -> Decimal:
         return Decimal(value)
     except (InvalidOperation, TypeError) as exc:
         raise ValueError(f"Could not convert {value!r} to Decimal") from exc
+
+
+# The operators allowed in the delay of a post-read command
+_DELAY_OPERATORS: dict[type, Any] = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+    ast.UAdd: operator.pos,
+    ast.USub: operator.neg,
+}
+_MAX_EXPONENT = 100  # Prevent expressions like 9**9**9, which take forever to calculate
+
+
+def _evaluate_arithmetic(node: ast.AST) -> int | float:
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+        return node.value
+    if isinstance(node, ast.BinOp) and type(node.op) in _DELAY_OPERATORS:
+        left, right = _evaluate_arithmetic(node.left), _evaluate_arithmetic(node.right)
+        if isinstance(node.op, ast.Pow) and abs(right) > _MAX_EXPONENT:
+            raise ValueError(f"Exponent {right} is too large.")
+        return _DELAY_OPERATORS[type(node.op)](left, right)
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _DELAY_OPERATORS:
+        return _DELAY_OPERATORS[type(node.op)](_evaluate_arithmetic(node.operand))
+    raise ValueError(f"Unsupported expression '{ast.unparse(node)}'.")
+
+
+def evaluate_delay(expression: Any) -> float:
+    """
+    Evaluate the delay of a post-read command. It is either a number or an arithmetic expression like "60*60*24".
+
+    Only numbers and the operators +, -, *, /, //, %, ** are allowed. Unlike `eval()`, this cannot run code.
+
+    Raises
+    ------
+    ConfigurationError
+        If the delay is not a number or a valid arithmetic expression
+    """
+    if isinstance(expression, (int, float)) and not isinstance(expression, bool):
+        return float(expression)
+    if not isinstance(expression, str):
+        raise ConfigurationError(f"Invalid delay {expression!r}. Use a number or an arithmetic expression.")
+    try:
+        return float(_evaluate_arithmetic(ast.parse(expression.strip(), mode="eval").body))
+    except (SyntaxError, ValueError, ArithmeticError) as exc:
+        raise ConfigurationError(f"Invalid delay {expression!r}: {exc}") from exc
+
+
+@dataclass
+class PostReadCommand:
+    """
+    A command sent to the instrument after a reading.
+
+    Parameters
+    ----------
+    cmd: str
+        The command
+    delay: float or None
+        Only send the command, once this many seconds have passed since the logger started.
+    repeat: int
+        Send the command this many times. -1 sends it after every reading.
+    """
+
+    cmd: str
+    delay: float | None = None
+    repeat: int = -1
+
+    @classmethod
+    def from_config(cls, config: str | dict[str, Any]) -> PostReadCommand:
+        """
+        Create a command from the configuration, either a plain command string or a dict with the keys `cmd`, `delay`
+        and `repeat`.
+
+        Raises
+        ------
+        ConfigurationError
+            If the configuration is invalid
+        """
+        if isinstance(config, str):
+            return cls(cmd=config)
+        if not isinstance(config, dict) or not isinstance(config.get("cmd"), str):
+            raise ConfigurationError(f"Invalid post-read command {config!r}. It needs a 'cmd'.")
+        unknown_keys = set(config) - {"cmd", "delay", "repeat"}
+        if unknown_keys:
+            raise ConfigurationError(f"Unknown keys {sorted(unknown_keys)} in post-read command {config!r}.")
+        delay = config.get("delay")
+        try:
+            repeat = int(config.get("repeat", -1))
+        except (TypeError, ValueError) as exc:
+            raise ConfigurationError(f"Invalid repeat in post-read command {config!r}.") from exc
+        return cls(cmd=config["cmd"], delay=evaluate_delay(delay) if delay is not None else None, repeat=repeat)
 
 
 class LoggingDevice:  # pylint: disable=too-many-instance-attributes
@@ -138,7 +235,10 @@ class LoggingDevice:  # pylint: disable=too-many-instance-attributes
             else column_names
         )
         self.__initial_commands = [] if initial_commands is None else initial_commands
-        self.__post_read_commands = [] if post_read_commands is None else post_read_commands
+        # Parse the commands now, so that configuration errors are reported at startup
+        self.__post_read_commands = [
+            PostReadCommand.from_config(cmd) for cmd in ([] if post_read_commands is None else post_read_commands)
+        ]
         self.__base_topic = base_topic if base_topic is not None else ""
         self.__logger = logging.getLogger(__name__)
         self.__start_time = datetime.now(UTC)
@@ -179,18 +279,18 @@ class LoggingDevice:  # pylint: disable=too-many-instance-attributes
         self.__logger.debug("Reading %s...", self.__device_name)
         return ()
 
-    async def post_read(self):
+    async def post_read(self) -> None:
+        """Send the post-read commands, that are due."""
         commands_to_run = []
-        for cmd in self.__post_read_commands:
-            delay = eval(cmd["delay"]) if cmd.get("delay") else None
-            number_of_repetitions = int(cmd.get("repeat", -1))
-            if number_of_repetitions == 0:
+        elapsed = (datetime.now(UTC) - self.__start_time).total_seconds()
+        for command in self.__post_read_commands:
+            if command.repeat == 0:
                 continue
-            if delay and (delay > (datetime.now(UTC) - self.__start_time).total_seconds()):
+            if command.delay and command.delay > elapsed:
                 continue
-            if number_of_repetitions > 0:
-                cmd["repeat"] = number_of_repetitions - 1
-            commands_to_run.append(cmd["cmd"])
+            if command.repeat > 0:
+                command.repeat -= 1
+            commands_to_run.append(command.cmd)
 
         await self.__batch_run([self.__device.write(cmd) for cmd in commands_to_run])
 
