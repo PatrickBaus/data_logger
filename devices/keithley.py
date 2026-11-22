@@ -21,13 +21,11 @@ import logging
 from datetime import UTC, datetime, timezone
 from typing import overload
 
-from async_gpib import AsyncGpib
-
-from devices.async_ethernet import AsyncEthernet
+from devices.connections import Connection, GpibConnection, PrologixGpibConnection
 
 
 class KeithleyDMM6500:
-    def __init__(self, connection: AsyncEthernet):
+    def __init__(self, connection: Connection) -> None:
         self.__conn = connection
 
     async def connect(self) -> None:
@@ -42,20 +40,10 @@ class KeithleyDMM6500:
         await self.__conn.disconnect()
 
     async def write(self, cmd: str) -> None:
-        await self.__conn.write((cmd + "\n").encode("ascii"))
+        await self.__conn.write(cmd.encode("ascii"))
 
-    @overload
-    async def __read(self, length: None = None) -> str: ...
-
-    @overload
-    async def __read(self, length: int) -> bytes: ...
-
-    async def __read(self, length: int | None = None) -> str | bytes:
-        # Strip the separator "\n". If the length is given, the data is binary and returned as bytes.
-        if length is None:  # pylint: disable=no-else-return
-            return (await self.__conn.read())[:-1].decode("utf-8")
-        else:
-            return (await self.__conn.read(length=length + 1))[:-1]
+    async def __read(self) -> str:
+        return (await self.__conn.read()).decode("utf-8")
 
     @overload
     async def query(self, cmd: str, length: None = None) -> str: ...
@@ -64,8 +52,9 @@ class KeithleyDMM6500:
     async def query(self, cmd: str, length: int) -> bytes: ...
 
     async def query(self, cmd: str, length: int | None = None) -> str | bytes:
-        await self.write(cmd)
-        return await self.__read(length)
+        """Text replies are returned as str. If the length is given, the reply is binary and returned as bytes."""
+        result = await self.__conn.query(cmd.encode("ascii"), length=length)
+        return result if length is not None else result.decode("utf-8")
 
     async def get_id(self) -> str:
         # TODO: Catch AttributeError if not connected
@@ -85,14 +74,13 @@ class KeithleyDMM6500:
 
 
 class Keithley2002:
-    def __init__(self, connection: AsyncGpib) -> None:
+    def __init__(self, connection: Connection) -> None:
         self.__conn = connection
         self.__logger = logging.getLogger(__name__)
 
     async def get_id(self) -> str:
         # Catch AttributeError if not connected
-        await self.write("*IDN?", test_error=False)
-        return await self.read()
+        return await self.query("*IDN?")
 
     async def get_cal_data(self) -> tuple[datetime, datetime]:
         cal_date_str = await self.query(":CALibration:PROTected:DATE?")
@@ -104,9 +92,14 @@ class Keithley2002:
 
         return cal_datetime, due_datetime
 
+    def __gpib(self) -> GpibConnection | PrologixGpibConnection:
+        if not isinstance(self.__conn, (GpibConnection, PrologixGpibConnection)):
+            raise TypeError(f"{self.__conn} is not a GPIB connection.")
+        return self.__conn
+
     async def wait_for_data(self) -> None:
         try:
-            await self.__conn.wait((1 << 11) | (1 << 14))  # Wait for RQS or TIMO
+            await self.__gpib().wait((1 << 11) | (1 << 14))  # Wait for RQS or TIMO
         except asyncio.TimeoutError:
             self.__logger.warning(
                 "Timeout during wait. Is the IbaAUTOPOLL(0x7) bit set for the board? Or the timeout set too low?"
@@ -114,12 +107,13 @@ class Keithley2002:
             raise
 
     async def write(self, cmd: str, test_error: bool = False) -> None:
-        await self.__conn.write((cmd + "\n").encode("ascii"))
         if cmd.lower() == "*opc?":
-            await self.read()
-        elif test_error and not cmd.startswith("*"):
-            await self.__conn.write((":SYSTem:ERRor?" + "\n").encode("ascii"))
-            self.__logger.warning(await self.read())
+            # Wait until the device has finished all pending operations
+            await self.__conn.query(cmd.encode("ascii"))
+            return
+        await self.__conn.write(cmd.encode("ascii"))
+        if test_error and not cmd.startswith("*"):
+            self.__logger.warning(await self.query(":SYSTem:ERRor?"))
 
     @overload
     async def read(self, length: None = None) -> str: ...
@@ -128,11 +122,9 @@ class Keithley2002:
     async def read(self, length: int) -> bytes: ...
 
     async def read(self, length: int | None = None) -> str | bytes:
-        # if length is set, return the bytes untouched
-        if length is None:  # pylint: disable=no-else-return
-            return (await self.__conn.read()).strip().decode("utf-8")
-        else:
-            return (await self.__conn.read(length=length + 1))[:-1]
+        """Text replies are returned as str. If the length is given, the reply is binary and returned as bytes."""
+        result = await self.__conn.read(length=length)
+        return result if length is not None else result.decode("utf-8").strip()
 
     @overload
     async def query(self, cmd: str, length: None = None) -> str: ...
@@ -141,12 +133,12 @@ class Keithley2002:
     async def query(self, cmd: str, length: int) -> bytes: ...
 
     async def query(self, cmd: str, length: int | None = None) -> str | bytes:
-        await self.write(cmd, test_error=False)
-        result = await self.read(length)
-        return result
+        """Text replies are returned as str. If the length is given, the reply is binary and returned as bytes."""
+        result = await self.__conn.query(cmd.encode("ascii"), length=length)
+        return result if length is not None else result.decode("utf-8").strip()
 
     async def serial_poll(self) -> int:
-        return await self.__conn.serial_poll()
+        return await self.__gpib().serial_poll()
 
     async def connect(self) -> None:
         await self.__conn.connect()
@@ -156,7 +148,7 @@ class Keithley2002:
 
 
 class Keithley26xxB:
-    def __init__(self, connection: AsyncEthernet) -> None:
+    def __init__(self, connection: Connection) -> None:
         self.__conn = connection
 
     async def connect(self) -> None:
@@ -193,20 +185,10 @@ class Keithley26xxB:
         return await self.query("print(localnode.model)")
 
     async def write(self, cmd: str) -> None:
-        await self.__conn.write((cmd + "\n").encode("ascii"))
+        await self.__conn.write(cmd.encode("ascii"))
 
-    @overload
-    async def __read(self, length: None = None) -> str: ...
-
-    @overload
-    async def __read(self, length: int) -> bytes: ...
-
-    async def __read(self, length: int | None = None) -> str | bytes:
-        # Strip the separator "\n". If the length is given, the data is binary and returned as bytes.
-        if length is None:  # pylint: disable=no-else-return
-            return (await self.__conn.read())[:-1].decode("utf-8")
-        else:
-            return (await self.__conn.read(length=length + 1))[:-1]
+    async def __read(self) -> str:
+        return (await self.__conn.read()).decode("utf-8")
 
     @overload
     async def query(self, cmd: str, length: None = None) -> str: ...
@@ -215,8 +197,9 @@ class Keithley26xxB:
     async def query(self, cmd: str, length: int) -> bytes: ...
 
     async def query(self, cmd: str, length: int | None = None) -> str | bytes:
-        await self.write(cmd)
-        return await self.__read(length)
+        """Text replies are returned as str. If the length is given, the reply is binary and returned as bytes."""
+        result = await self.__conn.query(cmd.encode("ascii"), length=length)
+        return result if length is not None else result.decode("utf-8")
 
     async def read(self) -> str | None:
         try:

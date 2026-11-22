@@ -60,7 +60,7 @@ dev = [
 # explicitly, because the automatic discovery refuses a flat layout with several top-level packages.
 [tool.setuptools]
 py-modules = ["_version", "data_logger", "errors"]
-packages = ["devices", "endpoints", "factories", "logger"]
+packages = ["devices", "devices.connections", "endpoints", "factories", "logger"]
 
 [tool.setuptools.dynamic]
 # Read from _version.py. "data_logger.__version__" would import data_logger.py, which is the application itself.

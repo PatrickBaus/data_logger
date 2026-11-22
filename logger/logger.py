@@ -31,23 +31,23 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Generic, Protocol, TypeVar
 from uuid import UUID
 
-from async_gpib import AsyncGpib
-from prologix_gpib_async import AsyncPrologixGpibEthernetController
 from tinkerforge_async import IPConnectionAsync, base58decode
 from tinkerforge_async.bricklet_humidity_v2 import BrickletHumidityV2
 
 from devices import (
     EE07,
     LDT5948,
-    AsyncEthernet,
-    AsyncSerial,
+    EthernetConnection,
     Fluke1524,
     Fluke1590,
+    GpibConnection,
     Hp3458A,
     Keithley26xxB,
     Keithley2002,
     KeithleyDMM6500,
     Keysight34470A,
+    PrologixGpibConnection,
+    SerialConnection,
     Wavemaster,
 )
 from errors import ConfigurationError
@@ -212,6 +212,21 @@ DeviceT = TypeVar("DeviceT", bound=Instrument)
 ReadableDeviceT = TypeVar("ReadableDeviceT", bound=ReadableInstrument)
 
 
+def _serial_connection(  # pylint: disable=too-many-arguments
+    timeout: float,
+    baudrate: int,
+    *,
+    tty: str | None,
+    vid: int | None,
+    pid: int | None,
+    serial_number: str | None,
+) -> SerialConnection:
+    """Create a serial connection to the device configured by its tty or by the VID/PID of its USB adapter."""
+    if vid is not None and pid is not None:
+        return SerialConnection(vid_pid=(vid, pid), serial_number=serial_number, timeout=timeout, baudrate=baudrate)
+    return SerialConnection(tty=tty, timeout=timeout, baudrate=baudrate)
+
+
 class LoggingDevice(Generic[DeviceT]):  # pylint: disable=too-many-instance-attributes
     """
     The base class of all logging devices. It connects and initializes the instrument and runs the post-read commands.
@@ -351,8 +366,7 @@ class Keysight3458ALogger(GenericLogger[Hp3458A]):
         return "hp3458a"
 
     def __init__(self, name: int | str, pad: int, timeout: float, *args: Any, **kwargs: Any) -> None:
-        gpib_device = AsyncGpib(name=name, pad=pad, timeout=timeout)
-        device = Hp3458A(connection=gpib_device)
+        device = Hp3458A(connection=GpibConnection(name=name, pad=pad, timeout=timeout))
 
         super().__init__(device, *args, **kwargs)
 
@@ -383,7 +397,7 @@ class Keysight34470ALogger(LoggingDevice[Keysight34470A]):
         return "ks34470a"
 
     def __init__(self, host: str, port: int, timeout: float, *args: Any, **kwargs: Any) -> None:
-        connection = AsyncEthernet(host=host, port=port, timeout=timeout)
+        connection = EthernetConnection(host=host, port=port, timeout=timeout)
         device = Keysight34470A(connection=connection)
 
         super().__init__(device, *args, **kwargs)
@@ -425,7 +439,7 @@ class KeithleyDMM6500Logger(LoggingDevice[KeithleyDMM6500]):
         return "dmm6500"
 
     def __init__(self, host: str, port: int, timeout: float, *args: Any, **kwargs: Any) -> None:
-        connection = AsyncEthernet(host=host, port=port, timeout=timeout)
+        connection = EthernetConnection(host=host, port=port, timeout=timeout)
         device = KeithleyDMM6500(connection=connection)
 
         super().__init__(device, *args, **kwargs)
@@ -468,11 +482,7 @@ class LDT5948Logger(LoggingDevice[LDT5948]):
         serial_number: str | None = None,
         **kwargs: Any,
     ) -> None:
-        connection = (
-            AsyncSerial(vid_pid=(vid, pid), serial_number=serial_number, timeout=timeout, baudrate=baudrate)
-            if vid is not None and pid is not None
-            else AsyncSerial(tty=tty, timeout=timeout, baudrate=baudrate)
-        )
+        connection = _serial_connection(timeout, baudrate, tty=tty, vid=vid, pid=pid, serial_number=serial_number)
         device = LDT5948(connection)
         super().__init__(device, *args, **kwargs)
 
@@ -547,8 +557,7 @@ class Keithley2002Logger(LoggingDevice[Keithley2002]):
         return "k2002"
 
     def __init__(self, name: int | str, pad: int, timeout: float, *args: Any, **kwargs: Any) -> None:
-        gpib_device = AsyncGpib(name=name, pad=pad, timeout=timeout)
-        device = Keithley2002(connection=gpib_device)
+        device = Keithley2002(connection=GpibConnection(name=name, pad=pad, timeout=timeout))
 
         super().__init__(device, *args, **kwargs)
 
@@ -618,7 +627,7 @@ class Keithley26xxBLogger(LoggingDevice[Keithley26xxB]):
         return "k26xxb"
 
     def __init__(self, host: str, port: int, timeout: float, *args: Any, **kwargs: Any) -> None:
-        connection = AsyncEthernet(host=host, port=port, timeout=timeout)
+        connection = EthernetConnection(host=host, port=port, timeout=timeout)
         device = Keithley26xxB(connection=connection)
 
         super().__init__(device, *args, **kwargs)
@@ -722,11 +731,7 @@ class Fluke1524Logger(LoggingDevice[Fluke1524]):
         serial_number: str | None = None,
         **kwargs: Any,
     ) -> None:
-        connection = (
-            AsyncSerial(vid_pid=(vid, pid), serial_number=serial_number, timeout=timeout, baudrate=baudrate)
-            if vid is not None and pid is not None
-            else AsyncSerial(tty=tty, timeout=timeout, baudrate=baudrate)
-        )
+        connection = _serial_connection(timeout, baudrate, tty=tty, vid=vid, pid=pid, serial_number=serial_number)
         device = Fluke1524(connection)
         super().__init__(device, *args, **kwargs)
 
@@ -767,8 +772,9 @@ class Fluke1590Logger(LoggingDevice[Fluke1590]):
         return "fluke1590"
 
     def __init__(self, host: str, port: int, pad: int, timeout: float, *args: Any, **kwargs: Any) -> None:
-        gpib_device = AsyncPrologixGpibEthernetController(hostname=host, port=port, pad=pad, timeout=timeout)
-        device = Fluke1590(connection=gpib_device)
+        # The Fluke 1590 is slow to respond, so poll the adapter less often
+        connection = PrologixGpibConnection(host=host, port=port, pad=pad, timeout=timeout, wait_delay=1)
+        device = Fluke1590(connection=connection)
 
         super().__init__(device, *args, **kwargs)
 
@@ -819,11 +825,7 @@ class EE07Logger(LoggingDevice[EE07]):
         serial_number: str | None = None,
         **kwargs: Any,
     ) -> None:
-        connection = (
-            AsyncSerial(vid_pid=(vid, pid), serial_number=serial_number, timeout=timeout, baudrate=baudrate)
-            if vid is not None and pid is not None
-            else AsyncSerial(tty=tty, timeout=timeout, baudrate=baudrate)
-        )
+        connection = _serial_connection(timeout, baudrate, tty=tty, vid=vid, pid=pid, serial_number=serial_number)
         device = EE07(connection)
         super().__init__(device, *args, **kwargs)
 
