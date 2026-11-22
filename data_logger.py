@@ -63,9 +63,11 @@ class DataGenerator:
         # Connect to all devices
         coros = [device.connect() for device in self.__sensors]
         results = await asyncio.gather(*coros, return_exceptions=True)
-        for result in results:
-            if isinstance(result, Exception):
-                raise result
+        errors = [result for result in results if isinstance(result, BaseException)]
+        if errors:
+            # __aexit__() is not called if __aenter__() fails, so disconnect the devices, that did connect.
+            await self.__disconnect_all()
+            raise errors[0]
 
         self.__logger.info("Devices initialized successfully.")
         return self
