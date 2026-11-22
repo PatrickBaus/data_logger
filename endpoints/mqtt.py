@@ -133,6 +133,19 @@ class MqttWriter:
         }
         return event.topic, json.dumps(payload, use_decimal=True)
 
+    def _convert_events(self, timestamp: datetime.datetime, events: tuple[DataEvent, ...]) -> list[tuple[str, str]]:
+        """
+        Convert the events to (topic, payload) tuples. Events, that cannot be published are logged and dropped, so they
+        do not block the queue.
+        """
+        payloads = []
+        for event in events:
+            try:
+                payloads.append(self._convert_to_json(timestamp, event))
+            except (TypeError, ValueError) as exc:
+                self.__logger.error("Dropping event %r: %s", event, exc)
+        return payloads
+
     @staticmethod
     def _calculate_timeout(last_reconnect_attempt: float, reconnect_interval: float) -> float:
         """
@@ -186,20 +199,12 @@ class MqttWriter:
                         if item is None:
                             # only get new data if we have pushed everything to the broker
                             item = await self.__write_queue.get()
-                        try:
-                            timestamp, events = item
-                            payloads = [self._convert_to_json(timestamp, event) for event in events]
-                        except TypeError:
-                            self.__logger.exception("Error while serializing DataEvent: %s.", item)
-                            item = None  # Drop the event
-                            self.__write_queue.task_done()
-                        else:
-                            for topic, payload in payloads:
-                                # self.__logger.info("Going to publish: %s to %s", payload, topic)
-                                await mqtt_client.publish(topic, payload=payload, qos=2)
-                            item = None  # Get a new event to publish
-                            self.__write_queue.task_done()
-                            error_code = 0  # 0 = success
+                        timestamp, events = item
+                        for topic, payload in self._convert_events(timestamp, events):
+                            await mqtt_client.publish(topic, payload=payload, qos=2)
+                        item = None  # Get a new event to publish
+                        self.__write_queue.task_done()
+                        error_code = 0  # 0 = success
             except aiomqtt.MqttCodeError as exc:
                 # Only log an error once
                 if error_code != exc.rc:
