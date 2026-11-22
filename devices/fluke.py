@@ -23,6 +23,10 @@ from decimal import Decimal, InvalidOperation
 from enum import Enum, unique
 from typing import TypeAlias
 
+from prologix_gpib_async import AsyncPrologixGpibEthernetController
+
+from devices.async_serial import AsyncSerial
+
 
 class InvalidDataError(ValueError):
     """Raised if the device does not return the expected result."""
@@ -57,7 +61,7 @@ class Fluke1590:  # pylint: disable=too-many-public-methods
 
     UNIT_CONVERSION = {"O": "Ω"}
 
-    def __init__(self, connection) -> None:
+    def __init__(self, connection: AsyncPrologixGpibEthernetController) -> None:
         self.__conn = connection
         self.__lock: asyncio.Lock | None = None
 
@@ -224,7 +228,7 @@ class Fluke1590:  # pylint: disable=too-many-public-methods
 
 
 class Fluke1524:
-    def __init__(self, conn) -> None:
+    def __init__(self, conn: AsyncSerial) -> None:
         self.__conn = conn
         self.__conn.separator = b"\r"
         self.__lock: asyncio.Lock | None = None

@@ -21,13 +21,15 @@ from decimal import Decimal, InvalidOperation
 from types import TracebackType
 from typing import Self, Type
 
+from devices.async_serial import AsyncSerial
+
 
 class Wavemaster:
     @property
-    def connection(self):
+    def connection(self) -> AsyncSerial:
         return self.__conn
 
-    def __init__(self, connection) -> None:
+    def __init__(self, connection: AsyncSerial) -> None:
         self.__conn = connection
         self.__lock: asyncio.Lock | None = None
 

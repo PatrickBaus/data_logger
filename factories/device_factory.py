@@ -2,6 +2,8 @@
 This file contains the logger factory, that produces loggers using the parameters given by the configurations.
 """
 
+from typing import Any
+
 from logger import (
     EE07Logger,
     Fluke1524Logger,
@@ -15,10 +17,11 @@ from logger import (
     LDT5948Logger,
     TinkerforgeLogger,
 )
+from logger.logger import LoggingDevice
 
 from .generic_factory import DriverFactory
 
-device_factory = DriverFactory()
+device_factory = DriverFactory[LoggingDevice[Any]]()
 device_factory.register(cls=TinkerforgeLogger)
 device_factory.register(cls=Keysight3458ALogger)
 device_factory.register(cls=Keysight34470ALogger)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from types import TracebackType
 
@@ -38,9 +39,9 @@ class Filewriter:
         self.__logger = logging.getLogger(__name__)
         self.__filehandle: AsyncTextIOWrapper | None = None
         self.__write_queue: asyncio.Queue[tuple[datetime, tuple[DataEvent, ...]]] = asyncio.Queue()
-        self.__running_tasks: set[asyncio.Task] = set()
+        self.__running_tasks: set[asyncio.Task[None]] = set()
 
-    async def __aenter__(self) -> asyncio.Queue:
+    async def __aenter__(self) -> asyncio.Queue[tuple[datetime, tuple[DataEvent, ...]]]:
         self.__logger.info("Initializing file writer")
         # Check if the directory exists, else create it, unless there is no directory specified
         if not os.path.exists(os.path.dirname(self.__filename)) and os.path.dirname(self.__filename):
@@ -92,7 +93,7 @@ class Filewriter:
                 self.__filehandle = None
             self.__logger.info("File '%s' closed.", self.__filename)
 
-    async def write(self, lines) -> None:
+    async def write(self, lines: Iterable[str]) -> None:
         """Write the lines directly to the file, bypassing the queue. Used for the header."""
         if self.__filehandle is None:
             raise RuntimeError("The file writer is not running. Use it as a context manager.")

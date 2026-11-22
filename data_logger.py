@@ -35,13 +35,14 @@ from datetime import datetime, timezone
 from decimal import InvalidOperation
 from itertools import chain
 from types import TracebackType
-from typing import Any, Self, cast
+from typing import Any, Protocol, Self, cast
 
 import yaml
 
 from _version import __version__
+from endpoints import Filewriter
 from factories import device_factory, endpoint_factory
-from logger.logger import DataEvent, LoggingDevice
+from logger.logger import DataEvent
 
 DEFAULT_WAIT_TIMEOUT = 10  # in seconds
 DEFAULT_RECONNECT_INTERVAL = 5  # in seconds
@@ -49,12 +50,29 @@ LOG_LEVEL = logging.INFO
 ERROR_LOG_FMT = "%(asctime)s %(name)-12s %(levelname)-8s %(message)s"
 
 
+class Sensor(Protocol):
+    """The methods of a logging device, that are used by the `DataGenerator`."""
+
+    @property
+    def column_names(self) -> list[str]: ...
+
+    async def connect(self) -> None: ...
+
+    async def disconnect(self) -> None: ...
+
+    async def get_log_header(self) -> str: ...
+
+    async def read(self) -> tuple[DataEvent, ...]: ...
+
+    async def post_read(self) -> None: ...
+
+
 class DataGenerator:
     """
     Connects to the logging devices and reads them in a loop.
     """
 
-    def __init__(self, sensors: Sequence[LoggingDevice]) -> None:
+    def __init__(self, sensors: Sequence[Sensor]) -> None:
         self.__sensors = sensors
         self.__logger = logging.getLogger(__name__)
 
@@ -165,7 +183,7 @@ class LoggingDaemon:  # pylint: disable=too-few-public-methods
 
     def __init__(
         self,
-        logging_devices: Sequence[LoggingDevice],
+        logging_devices: Sequence[Sensor],
         endpoints: dict[str, dict[str, Any]],
         time_interval: float = 0,
         reconnect_interval: float = DEFAULT_RECONNECT_INTERVAL,
@@ -187,8 +205,9 @@ class LoggingDaemon:  # pylint: disable=too-few-public-methods
 
             data_generator: DataGenerator = await stack.enter_async_context(DataGenerator(self.__devices))
 
-            if "file" in self.__endpoints:
-                await self.__endpoints["file"].write(await data_generator.get_header())
+            file_endpoint = self.__endpoints.get("file")
+            if isinstance(file_endpoint, Filewriter):
+                await file_endpoint.write(await data_generator.get_header())
 
             async for timestamp, data in data_generator.read_sensors(self.__time_interval):
                 for queue in endpoint_queues:

@@ -24,10 +24,11 @@ import asyncio
 import logging
 import operator
 import struct
+from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, Generic, Protocol, TypeVar
 from uuid import UUID
 
 from async_gpib import AsyncGpib
@@ -47,6 +48,7 @@ from devices import (
     Keithley2002,
     KeithleyDMM6500,
     Keysight34470A,
+    Wavemaster,
 )
 from errors import ConfigurationError
 
@@ -64,7 +66,7 @@ class DataEvent:
     unit: str
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.value)
 
 
@@ -95,7 +97,7 @@ def to_decimal(value: Any) -> Decimal:
 
 
 # The operators allowed in the delay of a post-read command
-_DELAY_OPERATORS: dict[type, Any] = {
+_DELAY_OPERATORS: dict[type[ast.AST], Callable[..., int | float]] = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
     ast.Mult: operator.mul,
@@ -188,13 +190,45 @@ class PostReadCommand:
         return cls(cmd=config["cmd"], delay=evaluate_delay(delay) if delay is not None else None, repeat=repeat)
 
 
-class LoggingDevice:  # pylint: disable=too-many-instance-attributes
+class Instrument(Protocol):
+    """The methods of an instrument driver, that are used by `LoggingDevice`."""
+
+    async def connect(self) -> None: ...
+
+    async def disconnect(self) -> None: ...
+
+    async def get_id(self) -> str: ...
+
+    async def write(self, cmd: str) -> None: ...
+
+
+class ReadableInstrument(Instrument, Protocol):
+    """An instrument, that returns a reading as text, used by `GenericLogger`."""
+
+    async def read(self) -> str: ...
+
+
+DeviceT = TypeVar("DeviceT", bound=Instrument)
+ReadableDeviceT = TypeVar("ReadableDeviceT", bound=ReadableInstrument)
+
+
+class LoggingDevice(Generic[DeviceT]):  # pylint: disable=too-many-instance-attributes
     """
     The base class of all logging devices. It connects and initializes the instrument and runs the post-read commands.
     """
 
+    @classmethod
+    def driver(cls) -> str:
+        """
+        Returns
+        -------
+        str
+            The driver that identifies it to the factory. Implemented by the logging devices, that can be configured.
+        """
+        raise NotImplementedError
+
     @property
-    def column_names(self):
+    def column_names(self) -> list[str]:
         """
         Returns a list/tuple of column names. The
         number of elements is the same as returned
@@ -203,7 +237,7 @@ class LoggingDevice:  # pylint: disable=too-many-instance-attributes
         return self.__column_names
 
     @property
-    def device(self):
+    def device(self) -> DeviceT:
         return self.__device
 
     @property
@@ -216,24 +250,18 @@ class LoggingDevice:  # pylint: disable=too-many-instance-attributes
 
     def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
-        device,
+        device: DeviceT,
         uuid: UUID,
         device_name: str | None = None,
-        column_names=None,
-        initial_commands=None,
-        post_read_commands=None,
+        column_names: list[str] | None = None,
+        initial_commands: list[str] | None = None,
+        post_read_commands: Sequence[str | dict[str, Any]] | None = None,
         base_topic: str | None = None,
     ) -> None:
         self.__device = device
         self.__uuid = uuid
         self.__device_name = device_name
-        self.__column_names = (
-            [
-                "",
-            ]
-            if column_names is None
-            else column_names
-        )
+        self.__column_names = [""] if column_names is None else column_names
         self.__initial_commands = [] if initial_commands is None else initial_commands
         # Parse the commands now, so that configuration errors are reported at startup
         self.__post_read_commands = [
@@ -244,32 +272,32 @@ class LoggingDevice:  # pylint: disable=too-many-instance-attributes
         self.__start_time = datetime.now(UTC)
 
     @staticmethod
-    async def __batch_run(coros, timeout=1):
+    async def __batch_run(coros: Iterable[Awaitable[None]], timeout: float = 1) -> None:
         """
         Execute coros in order with a timeout
         """
         for coro in coros:
             await asyncio.wait_for(coro, timeout=timeout)
 
-    async def connect(self):
+    async def connect(self) -> None:
         await self.__device.connect()
         self.__logger.debug("Device %s connected", self.__device)
         await self.initialize()
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         await self.__device.disconnect()
 
-    async def get_id(self):
+    async def get_id(self) -> str:
         return await self.__device.get_id()
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         device_id = await self.get_id()
         self.__logger.info("Initializing %s", device_id)
         if self.__device_name is None:
             self.__device_name = device_id
         await self.__batch_run([self.__device.write(cmd) for cmd in self.__initial_commands])
 
-    async def get_log_header(self):
+    async def get_log_header(self) -> str:
         return ""
 
     async def read(self) -> tuple[DataEvent, ...]:
@@ -295,7 +323,7 @@ class LoggingDevice:  # pylint: disable=too-many-instance-attributes
         await self.__batch_run([self.__device.write(cmd) for cmd in commands_to_run])
 
 
-class GenericLogger(LoggingDevice):
+class GenericLogger(LoggingDevice[ReadableDeviceT]):  # pylint: disable=abstract-method  # A base class
     async def read(self) -> tuple[DataEvent]:
         await super().read()
         data = await self.device.read()
@@ -311,7 +339,7 @@ class GenericLogger(LoggingDevice):
         )
 
 
-class Keysight3458ALogger(GenericLogger):
+class Keysight3458ALogger(GenericLogger[Hp3458A]):
     @classmethod
     def driver(cls) -> str:
         """
@@ -322,13 +350,13 @@ class Keysight3458ALogger(GenericLogger):
         """
         return "hp3458a"
 
-    def __init__(self, name: int | str, pad: int, timeout, *args, **kwargs):
+    def __init__(self, name: int | str, pad: int, timeout: float, *args: Any, **kwargs: Any) -> None:
         gpib_device = AsyncGpib(name=name, pad=pad, timeout=timeout)
         device = Hp3458A(connection=gpib_device)
 
         super().__init__(device, *args, **kwargs)
 
-    async def get_log_header(self):
+    async def get_log_header(self) -> str:
         cal_const71 = await self.device.get_acal1v()
         cal_const72 = await self.device.get_acal10v()
         cal_7v = await self.device.get_cal7v()
@@ -343,7 +371,7 @@ class Keysight3458ALogger(GenericLogger):
         )
 
 
-class Keysight34470ALogger(LoggingDevice):
+class Keysight34470ALogger(LoggingDevice[Keysight34470A]):
     @classmethod
     def driver(cls) -> str:
         """
@@ -354,13 +382,13 @@ class Keysight34470ALogger(LoggingDevice):
         """
         return "ks34470a"
 
-    def __init__(self, host: str, port: int, timeout, *args, **kwargs):
+    def __init__(self, host: str, port: int, timeout: float, *args: Any, **kwargs: Any) -> None:
         connection = AsyncEthernet(host=host, port=port, timeout=timeout)
         device = Keysight34470A(connection=connection)
 
         super().__init__(device, *args, **kwargs)
 
-    async def get_log_header(self):
+    async def get_log_header(self) -> str:
         acal_date, acal_temperature = await self.device.get_acal_data()
         cal_date, cal_temperature, _ = await self.device.get_cal_data()
         uptime = await self.device.get_system_uptime()
@@ -385,7 +413,7 @@ class Keysight34470ALogger(LoggingDevice):
         )
 
 
-class KeithleyDMM6500Logger(LoggingDevice):
+class KeithleyDMM6500Logger(LoggingDevice[KeithleyDMM6500]):
     @classmethod
     def driver(cls) -> str:
         """
@@ -396,7 +424,7 @@ class KeithleyDMM6500Logger(LoggingDevice):
         """
         return "dmm6500"
 
-    def __init__(self, host: str, port: int, timeout, *args, **kwargs):
+    def __init__(self, host: str, port: int, timeout: float, *args: Any, **kwargs: Any) -> None:
         connection = AsyncEthernet(host=host, port=port, timeout=timeout)
         device = KeithleyDMM6500(connection=connection)
 
@@ -418,7 +446,7 @@ class KeithleyDMM6500Logger(LoggingDevice):
         )
 
 
-class LDT5948Logger(LoggingDevice):
+class LDT5948Logger(LoggingDevice[LDT5948]):
     @classmethod
     def driver(cls) -> str:
         """
@@ -431,15 +459,15 @@ class LDT5948Logger(LoggingDevice):
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
-        timeout: int,
+        timeout: float,
         baudrate: int,
-        *args,
+        *args: Any,
         tty: str | None = None,
         vid: int | None = None,
         pid: int | None = None,
         serial_number: str | None = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         connection = (
             AsyncSerial(vid_pid=(vid, pid), serial_number=serial_number, timeout=timeout, baudrate=baudrate)
             if vid is not None and pid is not None
@@ -448,7 +476,7 @@ class LDT5948Logger(LoggingDevice):
         device = LDT5948(connection)
         super().__init__(device, *args, **kwargs)
 
-    async def get_log_header(self):
+    async def get_log_header(self) -> str:
         (
             kp,
             ki,
@@ -507,7 +535,7 @@ class LDT5948Logger(LoggingDevice):
         )
 
 
-class Keithley2002Logger(LoggingDevice):
+class Keithley2002Logger(LoggingDevice[Keithley2002]):
     @classmethod
     def driver(cls) -> str:
         """
@@ -518,29 +546,29 @@ class Keithley2002Logger(LoggingDevice):
         """
         return "k2002"
 
-    def __init__(self, name: int | str, pad: int, timeout, *args, **kwargs):
+    def __init__(self, name: int | str, pad: int, timeout: float, *args: Any, **kwargs: Any) -> None:
         gpib_device = AsyncGpib(name=name, pad=pad, timeout=timeout)
         device = Keithley2002(connection=gpib_device)
 
         super().__init__(device, *args, **kwargs)
 
-    async def get_log_header(self):
+    async def get_log_header(self) -> str:
         cal_date, cal_due_date = await self.device.get_cal_data()
         return f"K2002 Cal date={cal_date}; Next Cal due={cal_due_date}"
 
-    async def query_channel(self, channel) -> DataEvent:
+    async def query_channel(self, channel: int) -> DataEvent:
         await self.device.write(f":rout:clos (@{channel+1})")
         data = await self.device.query(":DATA:FRESh?", length=8)  # get a *new* 8 byte double from the instrument
         try:
             # The result of unpack is always a tuple, but we need only the first element
-            (data,) = struct.unpack("d", data)
+            (value,) = struct.unpack("d", data)
         except struct.error as exc:
-            raise ValueError(f"Device returned invalid data {data}.") from exc
+            raise ValueError(f"Device returned invalid data {data!r}.") from exc
         return DataEvent(
             sender=self.uuid,
             sid=channel,
             topic=self.base_topic + f"/channel{channel+1}",
-            value=data,
+            value=value,
             unit="V",
         )
 
@@ -549,10 +577,10 @@ class Keithley2002Logger(LoggingDevice):
         data = await self.device.query(":DATA:FRESh?", length=8)  # get a *new* 8 byte double from the instrument
         try:
             # The result of unpack is always a tuple, but we need only the first element
-            (data,) = struct.unpack("d", data)
+            (value,) = struct.unpack("d", data)
         except struct.error as exc:
-            raise ValueError(f"Device returned invalid data {data}.") from exc
-        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=data, unit=""),)
+            raise ValueError(f"Device returned invalid data {data!r}.") from exc
+        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=value, unit=""),)
 
 
 class Keithley2002ScannerLogger(Keithley2002Logger):
@@ -566,7 +594,7 @@ class Keithley2002ScannerLogger(Keithley2002Logger):
         """
         return "k2002_scanner"
 
-    def __init__(self, active_channels: tuple[int], *args, **kwargs) -> None:
+    def __init__(self, active_channels: Sequence[int], *args: Any, **kwargs: Any) -> None:
         # Only generate the column names, if the user did not configure them
         kwargs.setdefault("column_names", [f"K2002 CH{channel+1}" for channel in active_channels])
         super().__init__(*args, **kwargs)
@@ -578,7 +606,7 @@ class Keithley2002ScannerLogger(Keithley2002Logger):
         return tuple([await self.query_channel(channel) for channel in self.__active_channels])
 
 
-class Keithley26xxBLogger(LoggingDevice):
+class Keithley26xxBLogger(LoggingDevice[Keithley26xxB]):
     @classmethod
     def driver(cls) -> str:
         """
@@ -589,13 +617,13 @@ class Keithley26xxBLogger(LoggingDevice):
         """
         return "k26xxb"
 
-    def __init__(self, host: str, port: int, timeout, *args, **kwargs):
+    def __init__(self, host: str, port: int, timeout: float, *args: Any, **kwargs: Any) -> None:
         connection = AsyncEthernet(host=host, port=port, timeout=timeout)
         device = Keithley26xxB(connection=connection)
 
         super().__init__(device, *args, **kwargs)
 
-    async def get_log_header(self):
+    async def get_log_header(self) -> str:
         cal_date, cal_due_date = await self.device.get_cal_data()
         fw_version = await self.device.get_fw_version()
         sn = await self.device.get_serial_number()
@@ -612,7 +640,29 @@ class Keithley26xxBLogger(LoggingDevice):
         return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=to_decimal(data), unit="A"),)
 
 
-class TinkerforgeLogger(LoggingDevice):
+class TinkerforgeHumidity:
+    """Adapts the Tinkerforge humidity bricklet to the `Instrument` interface."""
+
+    def __init__(self, bricklet: BrickletHumidityV2) -> None:
+        self.__bricklet = bricklet
+
+    async def connect(self) -> None:
+        await self.__bricklet.connect()
+
+    async def disconnect(self) -> None:
+        await self.__bricklet.disconnect()
+
+    async def get_id(self) -> str:
+        return str(await self.__bricklet.get_identity())
+
+    async def write(self, cmd: str) -> None:
+        raise ConfigurationError(f"The Tinkerforge humidity bricklet does not accept commands like '{cmd}'.")
+
+    async def get_humidity(self) -> Decimal:
+        return await self.__bricklet.get_humidity()
+
+
+class TinkerforgeLogger(LoggingDevice[TinkerforgeHumidity]):
     @classmethod
     def driver(cls) -> str:
         """
@@ -623,13 +673,10 @@ class TinkerforgeLogger(LoggingDevice):
         """
         return "tinkerforge"
 
-    def __init__(self, host: str, uid: int | str, *args, **kwargs):
+    def __init__(self, host: str, uid: int | str, *args: Any, **kwargs: Any) -> None:
         ipcon = IPConnectionAsync(host=host)
-        if isinstance(uid, int):
-            device = BrickletHumidityV2(uid, ipcon)
-        else:
-            device = BrickletHumidityV2(base58decode(uid), ipcon)
-        super().__init__(device, *args, **kwargs)
+        bricklet = BrickletHumidityV2(uid if isinstance(uid, int) else base58decode(uid), ipcon)
+        super().__init__(TinkerforgeHumidity(bricklet), *args, **kwargs)
 
     # TODO: Rework TF api to be more general
     async def read(self) -> tuple[DataEvent]:
@@ -652,11 +699,8 @@ class TinkerforgeLogger(LoggingDevice):
             ),
         )
 
-    async def get_id(self):
-        return await self.device.get_identity()
 
-
-class Fluke1524Logger(LoggingDevice):
+class Fluke1524Logger(LoggingDevice[Fluke1524]):
     @classmethod
     def driver(cls) -> str:
         """
@@ -669,15 +713,15 @@ class Fluke1524Logger(LoggingDevice):
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
-        timeout: int,
+        timeout: float,
         baudrate: int,
-        *args,
+        *args: Any,
         tty: str | None = None,
         vid: int | None = None,
         pid: int | None = None,
         serial_number: str | None = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         connection = (
             AsyncSerial(vid_pid=(vid, pid), serial_number=serial_number, timeout=timeout, baudrate=baudrate)
             if vid is not None and pid is not None
@@ -707,11 +751,11 @@ class Fluke1524Logger(LoggingDevice):
             ),
         )
 
-    async def get_log_header(self):
+    async def get_log_header(self) -> str:
         return f"{await self.device.get_id()}"
 
 
-class Fluke1590Logger(LoggingDevice):
+class Fluke1590Logger(LoggingDevice[Fluke1590]):
     @classmethod
     def driver(cls) -> str:
         """
@@ -722,7 +766,7 @@ class Fluke1590Logger(LoggingDevice):
         """
         return "fluke1590"
 
-    def __init__(self, host: str, port: int, pad, timeout, *args, **kwargs):
+    def __init__(self, host: str, port: int, pad: int, timeout: float, *args: Any, **kwargs: Any) -> None:
         gpib_device = AsyncPrologixGpibEthernetController(hostname=host, port=port, pad=pad, timeout=timeout)
         device = Fluke1590(connection=gpib_device)
 
@@ -741,7 +785,7 @@ class Fluke1590Logger(LoggingDevice):
             ),
         )
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         await super().initialize()
         await self.device.set_line_termination(self.device.LineTerminator.LF)
         await self.device.set_timestamp(date=True, time=True)  # print date and time with each reading
@@ -753,7 +797,7 @@ class Fluke1590Logger(LoggingDevice):
         await self.device.set_integration_time(4)
 
 
-class EE07Logger(LoggingDevice):
+class EE07Logger(LoggingDevice[EE07]):
     @classmethod
     def driver(cls) -> str:
         """
@@ -766,15 +810,15 @@ class EE07Logger(LoggingDevice):
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
-        timeout: int,
+        timeout: float,
         baudrate: int,
-        *args,
+        *args: Any,
         tty: str | None = None,
         vid: int | None = None,
         pid: int | None = None,
         serial_number: str | None = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         connection = (
             AsyncSerial(vid_pid=(vid, pid), serial_number=serial_number, timeout=timeout, baudrate=baudrate)
             if vid is not None and pid is not None
@@ -803,11 +847,11 @@ class EE07Logger(LoggingDevice):
             ),
         )
 
-    async def get_log_header(self):
+    async def get_log_header(self) -> str:
         return f"{await self.device.get_id()}"
 
 
-class WavemasterLogger(LoggingDevice):
+class WavemasterLogger(LoggingDevice[Wavemaster]):  # pylint: disable=abstract-method  # Not configurable yet
     async def read(self) -> tuple[DataEvent]:
         await super().read()
         wavelength = await self.device.read_wavelength()

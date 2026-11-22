@@ -19,10 +19,15 @@
 import asyncio
 import logging
 from datetime import UTC, datetime, timezone
+from typing import overload
+
+from async_gpib import AsyncGpib
+
+from devices.async_ethernet import AsyncEthernet
 
 
 class KeithleyDMM6500:
-    def __init__(self, connection):
+    def __init__(self, connection: AsyncEthernet):
         self.__conn = connection
 
     async def connect(self) -> None:
@@ -39,14 +44,26 @@ class KeithleyDMM6500:
     async def write(self, cmd: str) -> None:
         await self.__conn.write((cmd + "\n").encode("ascii"))
 
-    async def __read(self, length: int | None = None) -> str:
-        # Strip the separator "\n"
+    @overload
+    async def __read(self, length: None = None) -> str: ...
+
+    @overload
+    async def __read(self, length: int) -> bytes: ...
+
+    async def __read(self, length: int | None = None) -> str | bytes:
+        # Strip the separator "\n". If the length is given, the data is binary and returned as bytes.
         if length is None:  # pylint: disable=no-else-return
             return (await self.__conn.read())[:-1].decode("utf-8")
         else:
             return (await self.__conn.read(length=length + 1))[:-1]
 
-    async def query(self, cmd: str, length: int | None = None) -> str:
+    @overload
+    async def query(self, cmd: str, length: None = None) -> str: ...
+
+    @overload
+    async def query(self, cmd: str, length: int) -> bytes: ...
+
+    async def query(self, cmd: str, length: int | None = None) -> str | bytes:
         await self.write(cmd)
         return await self.__read(length)
 
@@ -57,7 +74,7 @@ class KeithleyDMM6500:
     async def set_mode_resistance_2w(self) -> None:
         await self.write("SENS:FUNC 'RES'")
 
-    async def set_nplc(self, nplc) -> None:
+    async def set_nplc(self, nplc: float) -> None:
         await self.write(f"SENS:RES:NPLC {nplc}")
 
     async def read(self) -> str | None:
@@ -68,7 +85,7 @@ class KeithleyDMM6500:
 
 
 class Keithley2002:
-    def __init__(self, connection) -> None:
+    def __init__(self, connection: AsyncGpib) -> None:
         self.__conn = connection
         self.__logger = logging.getLogger(__name__)
 
@@ -104,19 +121,31 @@ class Keithley2002:
             await self.__conn.write((":SYSTem:ERRor?" + "\n").encode("ascii"))
             self.__logger.warning(await self.read())
 
-    async def read(self, length: int | None = None) -> str:
+    @overload
+    async def read(self, length: None = None) -> str: ...
+
+    @overload
+    async def read(self, length: int) -> bytes: ...
+
+    async def read(self, length: int | None = None) -> str | bytes:
         # if length is set, return the bytes untouched
         if length is None:  # pylint: disable=no-else-return
             return (await self.__conn.read()).strip().decode("utf-8")
         else:
             return (await self.__conn.read(length=length + 1))[:-1]
 
-    async def query(self, cmd: str, length: int | None = None) -> str:
+    @overload
+    async def query(self, cmd: str, length: None = None) -> str: ...
+
+    @overload
+    async def query(self, cmd: str, length: int) -> bytes: ...
+
+    async def query(self, cmd: str, length: int | None = None) -> str | bytes:
         await self.write(cmd, test_error=False)
         result = await self.read(length)
         return result
 
-    async def serial_poll(self) -> None:
+    async def serial_poll(self) -> int:
         return await self.__conn.serial_poll()
 
     async def connect(self) -> None:
@@ -127,7 +156,7 @@ class Keithley2002:
 
 
 class Keithley26xxB:
-    def __init__(self, connection) -> None:
+    def __init__(self, connection: AsyncEthernet) -> None:
         self.__conn = connection
 
     async def connect(self) -> None:
@@ -166,14 +195,26 @@ class Keithley26xxB:
     async def write(self, cmd: str) -> None:
         await self.__conn.write((cmd + "\n").encode("ascii"))
 
-    async def __read(self, length: int | None = None) -> str:
-        # Strip the separator "\n"
+    @overload
+    async def __read(self, length: None = None) -> str: ...
+
+    @overload
+    async def __read(self, length: int) -> bytes: ...
+
+    async def __read(self, length: int | None = None) -> str | bytes:
+        # Strip the separator "\n". If the length is given, the data is binary and returned as bytes.
         if length is None:  # pylint: disable=no-else-return
             return (await self.__conn.read())[:-1].decode("utf-8")
         else:
             return (await self.__conn.read(length=length + 1))[:-1]
 
-    async def query(self, cmd: str, length: int | None = None) -> str:
+    @overload
+    async def query(self, cmd: str, length: None = None) -> str: ...
+
+    @overload
+    async def query(self, cmd: str, length: int) -> bytes: ...
+
+    async def query(self, cmd: str, length: int | None = None) -> str | bytes:
         await self.write(cmd)
         return await self.__read(length)
 

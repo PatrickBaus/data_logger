@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from typing import Any
 from uuid import UUID
 
 from logger.logger import DataEvent
@@ -37,7 +38,7 @@ class FakeConnection:  # pylint: disable=missing-function-docstring
     async def write(self, cmd: str | bytes) -> None:
         self.written.append(self._to_str(cmd).rstrip("\r\n"))
 
-    async def read(self, **_kwargs) -> bytes:
+    async def read(self, **_kwargs: Any) -> bytes:
         if not self.written or self.written[-1] not in self.replies:
             raise TimeoutError("No reply")  # Like a real instrument, that does not answer
         reply = self.replies[self.written[-1]]
@@ -49,8 +50,35 @@ class FakeConnection:  # pylint: disable=missing-function-docstring
 class FakeStrConnection(FakeConnection):
     """Like FakeConnection, but returns strings like AsyncSerial."""
 
-    async def read(self, **_kwargs) -> str:  # type: ignore[override]
+    async def read(self, **_kwargs: Any) -> str:  # type: ignore[override]
         return (await super().read()).decode("utf-8")
+
+
+def as_transport(fake: FakeConnection) -> Any:
+    """
+    The drivers are typed with the transports they are used with. The fake has the same interface, so hand it to the
+    drivers as one of them.
+    """
+    return fake
+
+
+class FakeDevice:  # pylint: disable=missing-function-docstring
+    """Stand-in for an instrument driver. Records the commands written to it."""
+
+    def __init__(self) -> None:
+        self.written: list[str] = []
+
+    async def connect(self) -> None:
+        pass
+
+    async def disconnect(self) -> None:
+        pass
+
+    async def get_id(self) -> str:
+        return "FakeDevice"
+
+    async def write(self, cmd: str) -> None:
+        self.written.append(cmd)
 
 
 class FakeSensor:  # pylint: disable=missing-function-docstring

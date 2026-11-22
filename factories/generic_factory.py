@@ -1,35 +1,45 @@
-from typing import Any
+from typing import Any, Generic, Protocol, TypeVar
 
 from errors import UnknownDriverError
 
 
-class DriverFactory:
+class Driver(Protocol):  # pylint: disable=too-few-public-methods
+    """A class, that can be created by a factory. Its `driver()` is the name used in the configuration."""
+
+    @classmethod
+    def driver(cls) -> str: ...
+
+
+DriverT = TypeVar("DriverT", bound=Driver)
+
+
+class DriverFactory(Generic[DriverT]):
     """
     A logger factory to select the correct driver for given logger config.
     """
 
-    def __init__(self):
-        self.__available_drivers = {}
+    def __init__(self) -> None:
+        self.__available_drivers: dict[str, type[DriverT]] = {}
 
-    def register(self, cls: Any) -> None:
+    def register(self, cls: type[DriverT]) -> None:
         """
         Register a driver with the factory. Should only be called in this file.
 
         Parameters
         ----------
-        cls: Any
+        cls: type
             The driver class to register.
         """
         self.__available_drivers[cls.driver()] = cls
 
-    def has(self, driver: str):
+    def has(self, driver: str) -> bool:
         """Returns true if the driver has been registered
 
         Parameters
         """
         return driver in self.__available_drivers
 
-    def get(self, driver: str, **kwargs: Any) -> Any:
+    def get(self, driver: str, **kwargs: Any) -> DriverT:
         """
         Look up the driver for a given database entry. Raises a `ValueError` if the driver is not registered.
 
@@ -42,8 +52,8 @@ class DriverFactory:
 
         Returns
         -------
-        Any
-            A sensor device driver object
+        DriverT
+            The object created by the driver
 
         Raises
         ----------
