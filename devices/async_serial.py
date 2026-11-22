@@ -26,6 +26,8 @@ from typing import Any
 import serial.tools.list_ports
 import serial_asyncio
 
+from devices.errors import NotConnectedError
+
 
 def find_device_by_vid(vid: int, pid: int, serial_number: str | None = None) -> str | None:
     """
@@ -84,11 +86,11 @@ class AsyncSerial:  # pylint: disable=too-many-instance-attributes
         timeout: float | None = None,
         **kwargs: Any,
     ) -> None:
-        self.__tty = find_device_by_vid(*vid_pid, serial_number=serial_number) if vid_pid is not None else tty
-        if self.__tty is None:
+        if tty is None and vid_pid is None:
             raise ValueError("Either supply a tty string or a VID/PID tuple.")
+        self.__tty = tty
+        self.__device_id = (vid_pid, serial_number)
         self.__separator = separator
-        self.__lock = None
         self.__kwargs = kwargs
         self.__timeout = 0.1 if timeout is None else timeout  # in seconds
         self.__reader: asyncio.StreamReader | None = None
@@ -96,7 +98,22 @@ class AsyncSerial:  # pylint: disable=too-many-instance-attributes
         self.__logger = logging.getLogger(__name__)
 
     def __str__(self) -> str:
-        return f"AsyncSerial({self.__tty})"
+        return f"AsyncSerial({self.__describe_port()})"
+
+    def __describe_port(self) -> str:
+        """
+        Describe the port for error and log messages. If the port is configured by its VID/PID, the tty is unknown
+        until a matching device is found. Describe it by the VID/PID and the serial number and add the tty, once known.
+        """
+        vid_pid, serial_number = self.__device_id
+        if vid_pid is None:
+            return str(self.__tty)
+        description = f"VID:PID {vid_pid[0]:04x}:{vid_pid[1]:04x}"
+        if serial_number is not None:
+            description += f", serial number {serial_number}"
+        if self.__tty is not None:
+            description += f" ({self.__tty})"
+        return description
 
     async def read(self, length: int | None = None) -> str:
         """
@@ -111,16 +128,18 @@ class AsyncSerial:  # pylint: disable=too-many-instance-attributes
         TimeoutError
             If no data arrived in time
         """
-        if self.is_connected:
-            if length is None:
-                coro = self.__reader.readuntil(self.__separator)
-            else:
-                coro = self.__reader.readexactly(length)
-            data = await asyncio.wait_for(coro, timeout=self.__timeout)
-            return data.decode("utf-8")
+        if not self.is_connected:
+            raise NotConnectedError(f"Cannot read from {self.__describe_port()}. Not connected.")
+        assert self.__reader is not None
+        if length is None:
+            coro = self.__reader.readuntil(self.__separator)
         else:
-            # TODO: raise custom error
-            pass
+            coro = self.__reader.readexactly(length)
+        try:
+            data = await asyncio.wait_for(coro, timeout=self.__timeout)
+        except asyncio.IncompleteReadError as exc:
+            raise ConnectionError(f"Serial connection to {self.__describe_port()} closed.") from exc
+        return data.decode("utf-8")
 
     async def write(self, cmd: str) -> None:
         """
@@ -131,12 +150,12 @@ class AsyncSerial:  # pylint: disable=too-many-instance-attributes
         NotConnectedError
             If the connection is not open
         """
-        if self.is_connected:
-            self.__writer.write(cmd.encode())
-            await asyncio.wait_for(self.__writer.drain(), timeout=self.__timeout)
-        else:
-            # TODO: raise custom error
-            pass
+        if not self.is_connected:
+            raise NotConnectedError(f"Cannot write to {self.__describe_port()}. Not connected.")
+        assert self.__writer is not None
+        self.__writer.write(cmd.encode())
+        await asyncio.wait_for(self.__writer.drain(), timeout=self.__timeout)
+
     async def connect(self) -> None:
         """
         Open the connection, unless it is already open.
@@ -146,20 +165,25 @@ class AsyncSerial:  # pylint: disable=too-many-instance-attributes
         ConnectionError
             If no device with the configured VID/PID is attached
         """
-        if not self.is_connected:
-            self.__lock = asyncio.Lock()
-            self.__reader, self.__writer = await asyncio.wait_for(
-                serial_asyncio.open_serial_connection(url=self.__tty, **self.__kwargs), timeout=self.__timeout
-            )
+        if self.is_connected:
+            return
+        vid_pid, serial_number = self.__device_id
+        if vid_pid is not None:
+            self.__tty = find_device_by_vid(*vid_pid, serial_number=serial_number)
+            if self.__tty is None:
+                raise ConnectionError(f"No serial device found with {self.__describe_port()}.")
+        self.__reader, self.__writer = await asyncio.wait_for(
+            serial_asyncio.open_serial_connection(url=self.__tty, **self.__kwargs), timeout=self.__timeout
+        )
 
-            self.__writer.transport.serial.reset_input_buffer()
-            self.__logger.info("Serial connection established to '%s'", self.__tty)
+        self.__writer.transport.serial.reset_input_buffer()  # type: ignore[union-attr]
+        self.__logger.info("Serial connection established to %s", self.__describe_port())
 
     async def disconnect(self) -> None:
         """Close the connection. The connection is always removed, even if closing fails."""
         if self.is_connected:
+            assert self.__writer is not None
             try:
-                # self.__reader._transport.close()  # This is (probably) not needed
                 try:
                     self.__writer.close()
                     await self.__writer.wait_closed()
@@ -168,4 +192,4 @@ class AsyncSerial:  # pylint: disable=too-many-instance-attributes
             finally:
                 # We guarantee, that the connection is removed
                 self.__writer, self.__reader = None, None
-                self.__logger.info("Serial connection disconnected from %s", self.__tty)
+                self.__logger.info("Serial connection disconnected from %s", self.__describe_port())
