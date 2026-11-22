@@ -188,9 +188,7 @@ class LoggingDaemon:  # pylint: disable=too-few-public-methods
             data_generator: DataGenerator = await stack.enter_async_context(DataGenerator(self.__devices))
 
             if "file" in self.__endpoints:
-                await asyncio.gather(
-                    *[self.__endpoints["file"].write(line for line in await data_generator.get_header())]
-                )
+                await self.__endpoints["file"].write(await data_generator.get_header())
 
             async for timestamp, data in data_generator.read_sensors(self.__time_interval):
                 for queue in endpoint_queues:
