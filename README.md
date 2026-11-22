@@ -9,7 +9,7 @@ multimeters, thermometers, temperature controllers and humidity sensors over GPI
 writes the readings to a CSV file, an MQTT broker, or both. All instruments are read in parallel, one row per round.
 
 The logger is meant to run unattended for days or weeks: invalid readings and timeouts are logged and skipped, lost
-connections are re-established automatically and errors are additionally written to `errors.log`.
+connections are re-established automatically and errors are additionally written to an error log file.
 
 The logger requires Python 3.12 or newer.
 
@@ -53,11 +53,12 @@ Stop it with `Ctrl+C`, `SIGTERM` or `SIGHUP`. The logger waits up to 3 seconds f
 data and disconnects the instruments before it exits.
 
 ## Configuration
-The configuration is a YAML file with two sections, `endpoints` and `devices`, and two optional settings:
+The configuration is a YAML file with two sections, `endpoints` and `devices`, and three optional settings:
 
 ```yaml
 time_interval: 0  # Minimum time in seconds between two readings. The slowest instrument sets the pace. Default: 0
 reconnect_interval: 5  # Time in seconds to wait before reconnecting after a connection error. Default: 5
+error_log: "logs/errors_{date}.log"  # The error log, {date} is replaced by the start time. Default: errors_{date}.log
 endpoints:
     ...
 devices:
@@ -200,7 +201,9 @@ following line is one round of readings, starting with the UTC timestamp:
 2023-04-24 08:59:45.982895,7.042545357037441,7.01778023822196,7.083611491927184,7.04811678159729,7.0628551134799835,7.039260247814799,7.032702405302967,7.057570567841024,7.02152966043868,7.020893466254958,28.135,32.111,27.37,23.39,23.230895996,0.469885349,0.866862714,23.000
 ```
 
-Errors are logged to the console and to `errors.log` in the working directory.
+Errors are logged to the console and to the error log, by default `errors_{date}.log` in the working directory.
+`{date}` is replaced by the start time, like in the name of the data file, so each run gets its own error log. A name
+without `{date}` is appended to by every run. The file is only created, when the first error is logged.
 
 ## Behaviour on errors
 - **Invalid readings and timeouts** are logged and the round is skipped. The next round starts immediately.

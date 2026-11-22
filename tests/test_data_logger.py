@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import re
+from collections.abc import Iterator
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
@@ -191,3 +194,59 @@ def test_startup_failures_are_counted_again_after_a_successful_startup(sleeps: l
         asyncio.run(daemon.run())
     assert sensor.connect_calls == 8
     assert len(sleeps) == 3 + 1 + 3  # retries, the reconnect after the lost connection, retries
+
+
+@pytest.fixture(name="root_handlers")
+def fixture_root_handlers() -> Iterator[None]:
+    """Remove the log handlers added by a test, so the log files of a test are not used by the others."""
+    root = logging.getLogger()
+    handlers = list(root.handlers)
+    yield
+    for handler in root.handlers[:]:
+        if handler not in handlers:
+            root.removeHandler(handler)
+            handler.close()
+
+
+@pytest.mark.usefixtures("root_handlers")
+def test_error_log_is_named_by_the_start_time(tmp_path: Path) -> None:
+    """Each run gets its own error log, like the data file. It used to be errors.log, appended to by every run."""
+    data_logger.setup_error_log(str(tmp_path / "logs" / "errors_{date}.log"))
+    logs = tmp_path / "logs"
+    assert not list(logs.iterdir())  # The file is created by the first error, not at startup
+    logging.getLogger("test").info("not an error")
+    assert not list(logs.iterdir())
+    logging.getLogger("test").error("the instrument is on fire")
+
+    (log,) = logs.iterdir()
+    assert re.fullmatch(r"errors_\d{4}-\d{2}-\d{2}_\d{2}:\d{2}:\d{2}\+00:00\.log", log.name)
+    assert "the instrument is on fire" in log.read_text(encoding="utf-8")
+
+
+@pytest.mark.usefixtures("root_handlers")
+def test_error_log_without_date_is_appended_to(tmp_path: Path) -> None:
+    for message in ("first run", "second run"):
+        handler = data_logger.setup_error_log(str(tmp_path / "errors.log"))
+        logging.getLogger("test").error(message)
+        logging.getLogger().removeHandler(handler)
+        handler.close()
+    assert (tmp_path / "errors.log").read_text(encoding="utf-8").count(" run") == 2
+
+
+@pytest.mark.usefixtures("root_handlers")
+@pytest.mark.parametrize("configured", [True, False], ids=["configured", "default"])
+def test_main_writes_errors_to_the_configured_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, configured: bool
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    config = "endpoints: {}\ndevices: []\n" + ("error_log: logs/run_{date}.log\n" if configured else "")
+    (tmp_path / "config.yml").write_text(config, encoding="utf-8")
+
+    async def run(_self: LoggingDaemon) -> None:
+        logging.getLogger("test").error("logged during the run")
+
+    monkeypatch.setattr(LoggingDaemon, "run", run)
+    data_logger.main(["-c", "config.yml"])
+
+    (log,) = (tmp_path / "logs").glob("run_*.log") if configured else tmp_path.glob("errors_*.log")
+    assert "logged during the run" in log.read_text(encoding="utf-8")

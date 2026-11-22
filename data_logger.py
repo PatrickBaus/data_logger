@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import signal
 import sys
 import warnings
@@ -50,6 +51,8 @@ DEFAULT_RECONNECT_INTERVAL = 5  # in seconds
 # buffer of an instrument, which shifts all following replies.
 MAX_STARTUP_RETRIES = 3
 LOG_LEVEL = logging.INFO
+# The name of the error log. "{date}" is replaced by the start time, like in the name of the data file.
+DEFAULT_ERROR_LOG = "errors_{date}.log"
 ERROR_LOG_FMT = "%(asctime)s %(name)-12s %(levelname)-8s %(message)s"
 
 
@@ -303,17 +306,39 @@ def init_argparse() -> argparse.ArgumentParser:
 
 
 def setup_logging() -> None:
-    """Log to the console and log errors to the file errors.log."""
+    """Log to the console."""
     # Report all mistakes managing asynchronous resources.
     warnings.simplefilter("always", ResourceWarning)
     # Enable logs from the ip connection. Set to debug for even more info
     logging.basicConfig(level=LOG_LEVEL)
 
-    # Set up a file logger for errors
-    logfile_handler = logging.FileHandler("errors.log")
+
+def setup_error_log(filename: str) -> logging.FileHandler:
+    """
+    Log errors to a file. "{date}" in the filename is replaced by the start time, so each run gets its own file. A
+    filename without "{date}" is appended to. The file is only created, when the first error is logged.
+
+    Parameters
+    ----------
+    filename: str
+        The name of the error log, for example "logs/errors_{date}.log". Missing directories are created.
+
+    Returns
+    -------
+    logging.FileHandler
+        The handler added to the root logger
+    """
+    # drop the microseconds, like the name of the data file
+    date = datetime.now(timezone.utc).replace(microsecond=0)
+    path = filename.format(date=date.isoformat("_"))
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    logfile_handler = logging.FileHandler(path, encoding="utf-8", delay=True)
     logfile_handler.setLevel(level=logging.ERROR)
     logfile_handler.setFormatter(logging.Formatter(fmt=ERROR_LOG_FMT, datefmt="%Y-%m-%d %H:%M:%S"))
     logging.getLogger().addHandler(logfile_handler)
+    return logfile_handler
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -330,6 +355,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             logging.getLogger(__name__).error("Config file not found")
             parser.print_help()
             sys.exit(1)
+
+        setup_error_log(measurement_config.get("error_log", DEFAULT_ERROR_LOG))
 
         devices = [device_factory.get(**device_config) for device_config in measurement_config.get("devices", [])]
 
