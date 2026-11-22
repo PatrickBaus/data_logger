@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -22,7 +24,7 @@ async def _collect(generator: DataGenerator, count: int) -> list[tuple[object, .
     return results
 
 
-def test_read_sensors_flattens_the_data():
+def test_read_sensors_flattens_the_data() -> None:
     sensors = [FakeSensor([returns(1, 2), returns(4, 5)]), FakeSensor([returns(3), returns(6)])]
     assert asyncio.run(_collect(DataGenerator(sensors), 2)) == [(1, 2, 3), (4, 5, 6)]
     assert sensors[0].post_reads == 1  # run between the two reads
@@ -33,30 +35,30 @@ def test_read_sensors_flattens_the_data():
     [ValueError("bad"), InvalidOperation(), TimeoutError()],
     ids=["ValueError", "InvalidOperation", "TimeoutError"],
 )
-def test_read_sensors_retries_after_invalid_data(error):
+def test_read_sensors_retries_after_invalid_data(error: Exception) -> None:
     """InvalidOperation from Decimal() is not a ValueError and used to crash the logger."""
     sensor = FakeSensor([raises(error), returns(Decimal("1.5"))])
     assert asyncio.run(_collect(DataGenerator([sensor]), 1)) == [(Decimal("1.5"),)]
 
 
-def test_read_sensors_raises_connection_errors():
+def test_read_sensors_raises_connection_errors() -> None:
     sensor = FakeSensor([raises(ConnectionResetError("lost"))])
     with pytest.raises(ConnectionResetError):
         asyncio.run(_collect(DataGenerator([sensor]), 1))
 
 
-def test_read_sensors_raises_cancelled_error():
+def test_read_sensors_raises_cancelled_error() -> None:
     """A cancelled read used to be skipped silently."""
     sensor = FakeSensor([raises(asyncio.CancelledError())])
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(_collect(DataGenerator([sensor]), 1))
 
 
-def test_failed_connect_disconnects_the_other_devices():
+def test_failed_connect_disconnects_the_other_devices() -> None:
     good = FakeSensor()
     bad = FakeSensor(connect_error=ConnectionRefusedError("refused"))
 
-    async def test():
+    async def test() -> None:
         async with DataGenerator([good, bad]):
             pass
 
@@ -65,7 +67,7 @@ def test_failed_connect_disconnects_the_other_devices():
     assert good.connect_calls == 1 and not good.connected
 
 
-def test_get_header():
+def test_get_header() -> None:
     sensors = [FakeSensor(column_names=["a", "b"]), FakeSensor(column_names=["c"])]
     header = asyncio.run(DataGenerator(sensors).get_header())
     assert header[0] == "# Fake sensor\n"
@@ -78,13 +80,13 @@ def test_get_header():
     [ConnectionRefusedError("refused"), TimeoutError(), EOFError(), OSError("I/O error")],
     ids=["ConnectionRefusedError", "TimeoutError", "EOFError", "OSError"],
 )
-def test_daemon_reconnects_with_a_delay(monkeypatch, error):
+def test_daemon_reconnects_with_a_delay(monkeypatch: pytest.MonkeyPatch, error: Exception) -> None:
     """Connection errors cause a reconnect after the reconnect interval, not a crash or a busy loop."""
     sensor = FakeSensor(connect_error=error)
     sleeps = []
     real_sleep = asyncio.sleep
 
-    async def sleep(delay, *args):
+    async def sleep(delay: float, *args: Any) -> None:
         if delay == 0:  # asyncio.sleep(0) of the fake sensor
             return await real_sleep(0, *args)
         sleeps.append(delay)
@@ -100,15 +102,15 @@ def test_daemon_reconnects_with_a_delay(monkeypatch, error):
     assert sleeps == [7, 7, 7]
 
 
-def test_daemon_does_not_swallow_other_errors():
+def test_daemon_does_not_swallow_other_errors() -> None:
     sensor = FakeSensor([raises(RuntimeError("bug"))])
     daemon = LoggingDaemon(logging_devices=[sensor], endpoints={})
     with pytest.raises(RuntimeError):
         asyncio.run(daemon.run())
 
 
-def test_daemon_stops_when_cancelled():
-    async def test():
+def test_daemon_stops_when_cancelled() -> None:
+    async def test() -> None:
         daemon = LoggingDaemon(logging_devices=[FakeSensor()], endpoints={})
         task = asyncio.create_task(daemon.run())
         await asyncio.sleep(0.05)
@@ -119,7 +121,7 @@ def test_daemon_stops_when_cancelled():
         asyncio.run(test())
 
 
-def test_main_without_config_file(tmp_path, monkeypatch):
+def test_main_without_config_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit) as exc_info:
         data_logger.main(["-c", "does_not_exist.yml"])

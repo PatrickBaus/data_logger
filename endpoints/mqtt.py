@@ -100,11 +100,8 @@ class MqttWriter:
     def __init__(
         self, hosts: str | list[str], username: str | None, password: str | None, number_of_workers: int = 5
     ) -> None:
-        self.__mqtt_params = MQTTParams(
-            hosts=hosts,  # type: ignore[arg-type]  # converted by the validator
-            username=username,
-            password=password,
-        )
+        # Validate the raw configuration. The validator converts the hosts to (hostname, port) tuples.
+        self.__mqtt_params = MQTTParams.model_validate({"hosts": hosts, "username": username, "password": password})
         self.__number_of_workers = int(number_of_workers)
         self.__write_queue: asyncio.Queue[tuple[datetime.datetime, tuple[DataEvent, ...]]] = asyncio.Queue()
         self.__running_tasks: set[asyncio.Task[None]] = set()

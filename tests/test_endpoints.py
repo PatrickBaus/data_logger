@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
+from typing import Any, Self
 
 import aiomqtt
 import pytest
@@ -18,10 +20,10 @@ from .fakes import event
 TIMESTAMP = datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
 
 
-def test_filewriter(tmp_path):
+def test_filewriter(tmp_path: Path) -> None:
     filename = tmp_path / "logs" / "test_{date}.csv"
 
-    async def test():
+    async def test() -> None:
         writer = Filewriter(filename=str(filename), descriptor="A test")
         async with writer as queue:
             await writer.write(["# Date,a,b\n"])
@@ -35,7 +37,7 @@ def test_filewriter(tmp_path):
     assert lines[4] == f"{TIMESTAMP},1.5,2"
 
 
-def test_filewriter_write_requires_context():
+def test_filewriter_write_requires_context() -> None:
     with pytest.raises(RuntimeError):
         asyncio.run(Filewriter(filename="unused.csv", descriptor="").write(["foo"]))
 
@@ -48,18 +50,18 @@ def test_filewriter_write_requires_context():
         (["example1.com:1884", "10.0.0.1"], [("example1.com", 1884), ("10.0.0.1", 1883)]),  # YAML list
     ],
 )
-def test_mqtt_hosts(hosts, expected):
-    assert MQTTParams(hosts=hosts, username=None, password=None).hosts == expected
+def test_mqtt_hosts(hosts: str | list[str], expected: list[tuple[str, int]]) -> None:
+    assert MQTTParams.model_validate({"hosts": hosts, "username": None, "password": None}).hosts == expected
 
 
 @pytest.mark.parametrize("hosts", ["", "bad host", "example.com:70000", []])
-def test_mqtt_invalid_hosts(hosts):
+def test_mqtt_invalid_hosts(hosts: str | list[str]) -> None:
     with pytest.raises(ValidationError):
-        MQTTParams(hosts=hosts, username=None, password=None)
+        MQTTParams.model_validate({"hosts": hosts, "username": None, "password": None})
 
 
 @pytest.mark.parametrize("topic", ["", "sensors/#", "sensors/+/temperature"])
-def test_mqtt_invalid_topics_are_rejected(topic):
+def test_mqtt_invalid_topics_are_rejected(topic: str) -> None:
     with pytest.raises(ValueError):
         MqttWriter._convert_to_json(TIMESTAMP, event(1, topic=topic))  # pylint: disable=protected-access
 
@@ -69,25 +71,25 @@ class FakeMqttClient:  # pylint: disable=missing-function-docstring
 
     published: list[tuple[str, str]] = []
 
-    def __init__(self, **_kwargs) -> None:
+    def __init__(self, **_kwargs: Any) -> None:
         pass
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> Self:
         return self
 
-    async def __aexit__(self, *_args) -> None:
+    async def __aexit__(self, *_args: Any) -> None:
         pass
 
     async def publish(self, topic: str, payload: str, qos: int) -> None:  # pylint: disable=unused-argument
         self.published.append((topic, payload))
 
 
-def test_mqtt_invalid_event_does_not_block_the_queue(monkeypatch):
+def test_mqtt_invalid_event_does_not_block_the_queue(monkeypatch: pytest.MonkeyPatch) -> None:
     """An event with an empty topic used to be retried forever and block the worker."""
     FakeMqttClient.published = []
     monkeypatch.setattr(aiomqtt, "Client", FakeMqttClient)
 
-    async def test():
+    async def test() -> None:
         writer = MqttWriter(hosts="localhost", username=None, password=None, number_of_workers=1)
         async with writer as queue:
             queue.put_nowait((TIMESTAMP, (event(1, topic=""), event(Decimal("2.5"), topic="sensors/a"))))

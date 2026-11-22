@@ -16,14 +16,14 @@ from .fakes import FakeConnection, FakeStrConnection, as_transport
 
 
 @pytest.mark.parametrize("method, cmd", [("get_temperature", "TEMP?"), ("get_temperature_acal_dcv", "CAL? 175")])
-def test_hp3458a_invalid_reply_raises_value_error(method, cmd):
+def test_hp3458a_invalid_reply_raises_value_error(method: str, cmd: str) -> None:
     """The conversion used to happen outside the try block and leak decimal.InvalidOperation."""
     device = Hp3458A(as_transport(FakeConnection({cmd: "garbage"})))
     with pytest.raises(ValueError, match="garbage"):
         asyncio.run(getattr(device, method)())
 
 
-def test_hp3458a_temperature():
+def test_hp3458a_temperature() -> None:
     device = Hp3458A(as_transport(FakeConnection({"TEMP?": "35.6"})))
     assert asyncio.run(device.get_temperature()) == Decimal("35.6")
 
@@ -37,7 +37,7 @@ def _ks_cal_replies(temperature: str) -> dict[str, str | bytes]:
     }
 
 
-def test_keysight34470a_cal_data():
+def test_keysight34470a_cal_data() -> None:
     device = Keysight34470A(as_transport(FakeConnection(_ks_cal_replies("+2.35E+01"))))
     cal_date, temperature, cal_str = asyncio.run(device.get_cal_data())
     assert cal_date == datetime(2024, 1, 2, 12, 30, tzinfo=timezone.utc)
@@ -45,19 +45,19 @@ def test_keysight34470a_cal_data():
     assert cal_str == '"cal string"'
 
 
-def test_keysight34470a_invalid_cal_temperature_raises_value_error():
+def test_keysight34470a_invalid_cal_temperature_raises_value_error() -> None:
     device = Keysight34470A(as_transport(FakeConnection(_ks_cal_replies("garbage"))))
     with pytest.raises(ValueError):
         asyncio.run(device.get_cal_data())
 
 
 @pytest.mark.parametrize("value, expected", [(True, "OUTPUT 1"), (False, "OUTPUT 0"), (1, "OUTPUT 1")])
-def test_ldt5948_set_enabled(value, expected):
+def test_ldt5948_set_enabled(value: bool, expected: str) -> None:
     """It used to send "OUTPUT True" and "OUTPUT False"."""
     conn = FakeStrConnection({expected: ""}, terminator="\r\n")
     device = LDT5948(as_transport(conn))
 
-    async def test():
+    async def test() -> None:
         await device.connect()
         await device.set_enabled(value)
 
@@ -78,8 +78,8 @@ async def _connected_fluke(replies: dict[str, str | bytes]) -> Fluke1590:
         ("1: 10000.0906 O  10-31-22  ", datetime(2022, 10, 31, tzinfo=timezone.utc)),
     ],
 )
-def test_fluke1590_read_temperature(reply, expected_timestamp):
-    async def test():
+def test_fluke1590_read_temperature(reply: str, expected_timestamp: datetime) -> None:
+    async def test() -> tuple[int, Decimal, str, datetime]:
         device = await _connected_fluke({"new": "NEW: 1", "tem": reply})
         return await device.read_temperature()
 
@@ -88,8 +88,8 @@ def test_fluke1590_read_temperature(reply, expected_timestamp):
     assert isinstance(value, Decimal)
 
 
-def test_fluke1590_timestamps_are_timezone_aware():
-    async def test():
+def test_fluke1590_timestamps_are_timezone_aware() -> None:
+    async def test() -> list[datetime]:
         results = []
         for reply in ("1: 10000.0902 O  15:24:06   ", "1: 10000.0869 O"):
             device = await _connected_fluke({"new": "NEW: 1", "tem": reply})
@@ -102,8 +102,8 @@ def test_fluke1590_timestamps_are_timezone_aware():
 
 
 @pytest.mark.parametrize("reply", ["garbage", "1: 10000.0869 K"])
-def test_fluke1590_invalid_data(reply):
-    async def test():
+def test_fluke1590_invalid_data(reply: str) -> None:
+    async def test() -> None:
         device = await _connected_fluke({"new": "NEW: 1", "tem": reply})
         await device.read_temperature()
 
@@ -112,26 +112,28 @@ def test_fluke1590_invalid_data(reply):
 
 
 @pytest.mark.parametrize("reply, expected", [("SCR SAV: OFF", 0), ("SCR SAV: ON", 300)])
-def test_fluke1590_get_screensaver(reply, expected):
-    async def test():
+def test_fluke1590_get_screensaver(reply: str, expected: int) -> None:
+    async def test() -> int:
         device = await _connected_fluke({"scrs": reply, "scrt": "SCR SAV TIME (MIN): 5"})
         return await device.get_screensaver()
 
     assert asyncio.run(test()) == expected
 
 
-def test_fluke1590_query_requires_connection():
+def test_fluke1590_query_requires_connection() -> None:
     with pytest.raises(ConnectionError):
         asyncio.run(Fluke1590(as_transport(FakeConnection())).query("v"))
 
 
 @pytest.mark.parametrize("driver", [Keysight34470A, KeithleyDMM6500, Keithley26xxB, Keithley2002])
-def test_binary_query_returns_bytes(driver):
+def test_binary_query_returns_bytes(
+    driver: type[Keysight34470A | KeithleyDMM6500 | Keithley26xxB | Keithley2002],
+) -> None:
     """A read by length is a binary transfer, like a double with :FORM:DATA REAL,64. It must not be decoded."""
     raw = struct.pack("d", 10.000012)  # not valid UTF-8
-    device = driver(FakeConnection({"READ?": raw + b"\n", "*IDN?": "MODEL,123"}))
+    device = driver(as_transport(FakeConnection({"READ?": raw + b"\n", "*IDN?": "MODEL,123"})))
 
-    async def test():
+    async def test() -> tuple[bytes, str]:
         return await device.query("READ?", length=8), await device.query("*IDN?")
 
     binary, text = asyncio.run(test())
