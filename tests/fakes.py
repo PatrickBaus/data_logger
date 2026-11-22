@@ -74,33 +74,47 @@ class FakeDevice:  # pylint: disable=missing-function-docstring
         self.written.append(cmd)
 
 
-class FakeSensor:  # pylint: disable=missing-function-docstring
-    """A logging device, whose read() returns the results of `reads` one after another."""
+class FakeSensor:  # pylint: disable=missing-function-docstring,too-many-instance-attributes
+    """
+    A logging device, whose read() returns the results of `reads` one after another. `connect_errors` and
+    `header_errors` are the outcomes of the calls of connect() and get_log_header() one after another, None is a
+    success. Once used up, connect() raises `connect_error`, if set.
+    """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         reads: list[Callable[[], tuple[DataEvent, ...]]] | None = None,
         connect_error: BaseException | None = None,
         column_names: list[str] | None = None,
+        connect_errors: list[BaseException | None] | None = None,
+        header_errors: list[BaseException | None] | None = None,
     ) -> None:
         self.reads = [] if reads is None else reads
         self.connect_error = connect_error
+        self.connect_errors = [] if connect_errors is None else connect_errors
+        self.header_errors = [] if header_errors is None else header_errors
         self.column_names = ["fake"] if column_names is None else column_names
         self.connected = False
         self.connect_calls = 0
+        self.header_calls = 0
         self.post_reads = 0
 
     async def connect(self) -> None:
         self.connect_calls += 1
         await asyncio.sleep(0)
-        if self.connect_error is not None:
-            raise self.connect_error
+        error = self.connect_errors.pop(0) if self.connect_errors else self.connect_error
+        if error is not None:
+            raise error
         self.connected = True
 
     async def disconnect(self) -> None:
         self.connected = False
 
     async def get_log_header(self) -> str:
+        self.header_calls += 1
+        error = self.header_errors.pop(0) if self.header_errors else None
+        if error is not None:
+            raise error
         return "Fake sensor"
 
     async def read(self) -> tuple[DataEvent, ...]:
