@@ -1,9 +1,9 @@
 aiofiles~=25.1.0
 aiomqtt~=2.5.1
-async-gpib~=3.1.0
+async-gpib~=3.2.0
 prologix-gpib-async~=1.7.0
 pydantic~=2.14.4
 pyserial-asyncio>=0.6
-PyYAML~=6.0
+PyYAML~=6.0.4
 simplejson~=4.3.0
-tinkerforge-async~=2.2.0
+tinkerforge-async~=3.0.0

@@ -42,4 +42,4 @@ repos:
     hooks:
     -   id: mypy
         # mypy runs in its own environment, so it needs the libraries, that ship type hints
-        additional_dependencies: [ aiomqtt, async-gpib>=3.1.0, prologix-gpib-async>=1.7.0, pydantic, pytest, tinkerforge-async>=2.2.0, types-aiofiles, types-pyserial, types-PyYAML, types-simplejson ]
+        additional_dependencies: [ aiomqtt, async-gpib>=3.2.0, prologix-gpib-async>=1.7.0, pydantic, pytest, tinkerforge-async>=3.0.0, types-aiofiles, types-pyserial, types-PyYAML, types-simplejson ]
