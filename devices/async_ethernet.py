@@ -23,11 +23,7 @@ import asyncio
 import logging
 from typing import Any
 
-
-class NotConnectedError(ConnectionError):
-    """
-    Raised if there is no connection
-    """
+from devices.errors import NotConnectedError
 
 
 class AsyncEthernet:
