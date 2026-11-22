@@ -116,6 +116,10 @@ class Fluke1590:  # pylint: disable=too-many-public-methods
         except ValueError:
             # Raised if the regex does not match, and therefore we have no values to unpack
             raise InvalidDataError(f"The device {self} returned invalid data: '{result}'") from None
+        try:
+            unit = self.UNIT_CONVERSION[unit]
+        except KeyError:
+            raise InvalidDataError(f"The device {self} returned an unknown unit: '{result}'") from None
         if date is not None and time is not None:
             timestamp = datetime.strptime(f"{date} {time}", "%m-%d-%y %H:%M:%S")
         elif date is None and time is not None:
@@ -124,7 +128,7 @@ class Fluke1590:  # pylint: disable=too-many-public-methods
             timestamp = datetime.strptime(date, "%m-%d-%y")
         else:
             timestamp = datetime.now(timezone.utc)
-        return int(channel) - 1, Decimal(value), self.UNIT_CONVERSION[unit], timestamp
+        return int(channel) - 1, Decimal(value), unit, timestamp
 
     async def read_channel(self, channel: int) -> str:
         # The manual states, no more than 5 commands per second (see 8.3 Digital Interface Commands in the manual)
