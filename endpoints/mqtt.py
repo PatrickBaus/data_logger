@@ -10,6 +10,7 @@ import itertools
 import logging
 import re
 from types import TracebackType
+from typing import Any
 
 import aiomqtt
 import simplejson as json
@@ -48,13 +49,15 @@ class MQTTParams(BaseModel):
 
     @field_validator("hosts", mode="before")
     @classmethod
-    def ensure_list_of_hosts(cls, value: str) -> list[tuple[str, int]]:
+    def ensure_list_of_hosts(cls, value: str | list[str]) -> list[tuple[str, int]]:
         """
-        Parse
+        Parse the list of MQTT brokers.
+
         Parameters
         ----------
-        value: str
-            Either a single hostname:port string or a comma separated list of hostname:port strings.
+        value: str or list of str
+            Either a single hostname:port string, a comma separated list of hostname:port strings or a (YAML) list of
+            hostname:port strings.
 
         Returns
         -------
@@ -62,6 +65,8 @@ class MQTTParams(BaseModel):
             A list of (hostname, port) tuples.
         """
         hosts = value.split(",")
+        if not hosts:
+            raise ValueError("No MQTT host given.")
         result = []
         for host in hosts:
             host = host.strip()
@@ -92,9 +97,11 @@ class MqttWriter:
         """
         return "mqtt"
 
-    def __init__(self, hosts: str, username: str | None, password: str | None, number_of_workers: int = 5) -> None:
+    def __init__(
+        self, hosts: str | list[str], username: str | None, password: str | None, number_of_workers: int = 5
+    ) -> None:
         self.__mqtt_params = MQTTParams(
-            hosts=hosts,
+            hosts=hosts,  # type: ignore[arg-type]  # converted by the validator
             username=username,
             password=password,
         )
@@ -104,7 +111,19 @@ class MqttWriter:
         self.__logger = logging.getLogger(__name__)
 
     @staticmethod
-    def _convert_to_json(timestamp: datetime.datetime, event: DataEvent):
+    def _convert_to_json(timestamp: datetime.datetime, event: DataEvent) -> tuple[str, str]:
+        """
+        Convert an event to a (topic, JSON payload) tuple.
+
+        Raises
+        ------
+        ValueError
+            If the topic is not a valid MQTT topic to publish to. Publishing to it would fail every time.
+        TypeError
+            If the value cannot be serialized
+        """
+        if not event.topic or "#" in event.topic or "+" in event.topic:
+            raise ValueError(f"Invalid MQTT topic '{event.topic}'. Is the 'base_topic' of the device configured?")
         payload = {
             "timestamp": timestamp.timestamp(),
             "uuid": str(event.sender),
@@ -143,7 +162,7 @@ class MqttWriter:
         reconnect_interval: int, default=5
             The time in seconds to wait between connection attempts.
         """
-        error_code = 0  # 0 = success
+        error_code: Any = 0  # 0 = success, otherwise an errno or an MQTT reason code
         item: tuple[datetime.datetime, tuple[DataEvent, ...]] | None = None
         last_reconnect_attempt = asyncio.get_running_loop().time() - reconnect_interval
         for host in itertools.cycle(self.__mqtt_params.hosts):

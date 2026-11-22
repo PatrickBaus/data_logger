@@ -15,15 +15,36 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # ##### END GPL LICENSE BLOCK #####
+"""An asyncio serial connection used by the serial (RS-232/USB) instruments."""
+
+from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any
 
 import serial.tools.list_ports
 import serial_asyncio
 
 
 def find_device_by_vid(vid: int, pid: int, serial_number: str | None = None) -> str | None:
+    """
+    Look up the tty of a USB serial adapter.
+
+    Parameters
+    ----------
+    vid: int
+        The USB vendor id
+    pid: int
+        The USB product id
+    serial_number: str or None
+        The serial number of the adapter. Use it to tell apart several adapters with the same VID/PID.
+
+    Returns
+    -------
+    str or None
+        The device path like "/dev/ttyUSB0" or None if no matching device was found.
+    """
     for port in serial.tools.list_ports.comports():
         if port.vid == vid and port.pid == pid:
             if serial_number is not None and serial_number != port.serial_number:
@@ -32,28 +53,37 @@ def find_device_by_vid(vid: int, pid: int, serial_number: str | None = None) -> 
     return None
 
 
-class AsyncSerial:
+class AsyncSerial:  # pylint: disable=too-many-instance-attributes
+    """
+    A line based serial connection. Reads return decoded strings including the separator, writes take strings.
+
+    If a VID/PID is given, the tty is looked up on every connection attempt, so the device is found again if it was
+    unplugged and re-enumerated under a different name.
+    """
+
     @property
-    def separator(self):
+    def separator(self) -> bytes:
+        """The line separator used by `read()`."""
         return self.__separator
 
     @separator.setter
-    def separator(self, value):
+    def separator(self, value: bytes) -> None:
         self.__separator = value
 
     @property
-    def is_connected(self):
+    def is_connected(self) -> bool:
+        """True if the connection is open."""
         return self.__writer is not None and not self.__writer.is_closing()
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         tty: str | None = None,
         vid_pid: tuple[int, int] | None = None,
         serial_number: str | None = None,
-        separator=b"\n",
-        timeout=None,
-        **kwargs,
-    ):
+        separator: bytes = b"\n",
+        timeout: float | None = None,
+        **kwargs: Any,
+    ) -> None:
         self.__tty = find_device_by_vid(*vid_pid, serial_number=serial_number) if vid_pid is not None else tty
         if self.__tty is None:
             raise ValueError("Either supply a tty string or a VID/PID tuple.")
@@ -61,7 +91,8 @@ class AsyncSerial:
         self.__lock = None
         self.__kwargs = kwargs
         self.__timeout = 0.1 if timeout is None else timeout  # in seconds
-        self.__reader, self.__writer = None, None
+        self.__reader: asyncio.StreamReader | None = None
+        self.__writer: asyncio.StreamWriter | None = None
         self.__logger = logging.getLogger(__name__)
 
     async def read(self, length=None):
@@ -94,7 +125,8 @@ class AsyncSerial:
             self.__writer.transport.serial.reset_input_buffer()
             self.__logger.info("Serial connection established to '%s'", self.__tty)
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
+        """Close the connection. The connection is always removed, even if closing fails."""
         if self.is_connected:
             try:
                 # self.__reader._transport.close()  # This is (probably) not needed
@@ -102,7 +134,7 @@ class AsyncSerial:
                     self.__writer.close()
                     await self.__writer.wait_closed()
                 except ConnectionResetError:
-                    pass  # We are no loger connected, so we can ignore it
+                    pass  # We are no longer connected, so we can ignore it
             finally:
                 # We guarantee, that the connection is removed
                 self.__writer, self.__reader = None, None

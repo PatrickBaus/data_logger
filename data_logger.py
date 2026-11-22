@@ -16,6 +16,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # ##### END GPL LICENSE BLOCK #####
+"""
+The data logger. It reads the instruments listed in the configuration file and pushes the data to the
+configures endpoints.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -43,7 +48,11 @@ ERROR_LOG_FMT = "%(asctime)s %(name)-12s %(levelname)-8s %(message)s"
 
 
 class DataGenerator:
-    def __init__(self, sensors):
+    """
+    Connects to the logging devices and reads them in a loop.
+    """
+
+    def __init__(self, sensors: Sequence[LoggingDevice]) -> None:
         self.__sensors = sensors
         self.__logger = logging.getLogger(__name__)
 
@@ -74,6 +83,9 @@ class DataGenerator:
                 self.__logger.error("Error during shutdown of the data generator.", exc_info=result)
 
     async def get_header(self) -> list[str]:
+        """
+        Create the header of the log file. It contains the info header of each device and the column names.
+        """
         self.__logger.debug("Creating file header")
         # create info header
         coros = [device.get_log_header() for device in self.__sensors]
@@ -93,11 +105,22 @@ class DataGenerator:
         result.append(f"# {','.join(column_names)}\n")
         return result
 
-    async def read_sensors(self, time_interval) -> AsyncIterator[tuple[datetime, tuple[DataEvent, ...]]]:
+    async def read_sensors(self, time_interval: float) -> AsyncIterator[tuple[datetime, tuple[DataEvent, ...]]]:
+        """
+        Read all devices in a loop and yield the data of each round.
+
+        Invalid data and timeouts are logged and the round is skipped. Other errors, for example connection errors, are
+        raised to the caller.
+
+        Parameters
+        ----------
+        time_interval: float
+            The minimum time in seconds between two rounds. The slowest device determines the actual interval.
+        """
         self.__logger.info("Reading data from devices")
         while "not canceled":
             try:
-                coros: list[Awaitable[tuple[DataEvent] | None]]
+                coros: list[Awaitable[tuple[DataEvent, ...] | None]]
                 coros = [device.read() for device in self.__sensors]
                 # Wait for the slowest device or at least {time_interval}
                 coros.append(asyncio.sleep(time_interval))
@@ -133,8 +156,18 @@ class DataGenerator:
                     self.__logger.error("Network unreachable. Retrying.")
 
 
-class LoggingDaemon:
-    def __init__(self, logging_devices, endpoints, time_interval=0):
+class LoggingDaemon:  # pylint: disable=too-few-public-methods
+    """
+    Connects the devices with the endpoints and reconnects them, if the connection is lost.
+    """
+
+    def __init__(
+        self,
+        logging_devices: Sequence[LoggingDevice],
+        endpoints: dict[str, dict[str, Any]],
+        time_interval: float = 0,
+        reconnect_interval: float = DEFAULT_RECONNECT_INTERVAL,
+    ) -> None:
         self.__devices = logging_devices
         self.__endpoints = {
             endpoint: endpoint_factory.get(driver=endpoint, **endpoints[endpoint]) for endpoint in endpoints
@@ -143,7 +176,7 @@ class LoggingDaemon:
 
         self.__logger = logging.getLogger(__name__)
 
-    async def _read_sensors(self):
+    async def _read_sensors(self) -> None:
         async with AsyncExitStack() as stack:
             endpoint_queues = await asyncio.gather(
                 *[stack.enter_async_context(endpoint) for endpoint in self.__endpoints.values()]
@@ -161,8 +194,13 @@ class LoggingDaemon:
                     queue.put_nowait((timestamp, data))
                 self.__logger.info(",".join(map(str, data)))
 
-    async def run(self):
-        # Catch signals and shutdown
+    async def run(self) -> None:
+        """
+        Run the logger until it is cancelled or receives SIGHUP, SIGTERM or SIGINT. Connection errors cause a
+        reconnect after `reconnect_interval` seconds.
+        """
+        # Catch signals and shutdown. Cancel this task, not only the current attempt, so that a signal also stops the
+        # logger while it is waiting to reconnect.
         signals = (signal.SIGHUP, signal.SIGTERM, signal.SIGINT)
         while "not cancelled":
             main_task = asyncio.create_task(self._read_sensors())
@@ -181,9 +219,10 @@ class LoggingDaemon:
 
 
 def init_argparse() -> argparse.ArgumentParser:
+    """Create the command line parser."""
     arg_parser = argparse.ArgumentParser(
         usage="%(prog)s [-c config_file]",
-        description="Read sensors and push the data to an MQTT server.",
+        description="Read sensors and push the data to one or more endpoints.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     arg_parser.add_argument(
