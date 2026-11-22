@@ -43,6 +43,7 @@ from factories import device_factory, endpoint_factory
 from logger.logger import DataEvent
 
 DEFAULT_WAIT_TIMEOUT = 10  # in seconds
+DEFAULT_RECONNECT_INTERVAL = 5  # in seconds
 LOG_LEVEL = logging.INFO
 ERROR_LOG_FMT = "%(asctime)s %(name)-12s %(levelname)-8s %(message)s"
 
