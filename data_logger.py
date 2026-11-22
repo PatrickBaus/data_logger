@@ -234,7 +234,7 @@ class LoggingDaemon:  # pylint: disable=too-few-public-methods
                 except (OSError, EOFError) as exc:
                     self.__logger.error(
                         "Connection error: %s. Reconnecting in %.0f s.",
-                        str(exc) or type(exc).__name__,
+                        (str(exc) or type(exc).__name__).rstrip("."),
                         self.__reconnect_interval,
                     )
                     await asyncio.sleep(self.__reconnect_interval)
