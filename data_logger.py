@@ -18,7 +18,7 @@
 # ##### END GPL LICENSE BLOCK #####
 """
 The data logger. It reads the instruments listed in the configuration file and pushes the data to the
-configures endpoints.
+configured endpoints.
 """
 
 from __future__ import annotations
