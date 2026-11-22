@@ -467,11 +467,9 @@ class Keithley2002ScannerLogger(Keithley2002Logger):
         return "k2002_scanner"
 
     def __init__(self, active_channels: tuple[int], *args, **kwargs) -> None:
-        super().__init__(
-            column_names=[f"K2002 CH{channel+1}" for channel in active_channels],
-            *args,
-            **kwargs,
-        )
+        # Only generate the column names, if the user did not configure them
+        kwargs.setdefault("column_names", [f"K2002 CH{channel+1}" for channel in active_channels])
+        super().__init__(*args, **kwargs)
         self.__active_channels = active_channels
 
     async def read(self) -> tuple[DataEvent, ...]:
