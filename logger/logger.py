@@ -15,14 +15,16 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # ##### END GPL LICENSE BLOCK #####
+"""The logging devices. They wrap the instrument drivers and turn their readings into data events."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
@@ -57,13 +59,43 @@ class DataEvent:
     topic: str
     value: Any
     unit: str
-    timestamp: datetime = datetime.now(timezone.utc)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def __str__(self):
         return str(self.value)
 
 
-class LoggingDevice:
+def to_decimal(value: Any) -> Decimal:
+    """
+    Convert an instrument reply to a Decimal.
+
+    Parameters
+    ----------
+    value: Any
+        The value returned by the instrument, typically a string
+
+    Returns
+    -------
+    Decimal
+        The converted value
+
+    Raises
+    ------
+    ValueError
+        If the value cannot be converted. `Decimal()` raises `decimal.InvalidOperation`, which is not a `ValueError`
+        and would not be caught by the retry logic of the data generator.
+    """
+    try:
+        return Decimal(value)
+    except (InvalidOperation, TypeError) as exc:
+        raise ValueError(f"Could not convert {value!r} to Decimal") from exc
+
+
+class LoggingDevice:  # pylint: disable=too-many-instance-attributes
+    """
+    The base class of all logging devices. It connects and initializes the instrument and runs the post-read commands.
+    """
+
     @property
     def column_names(self):
         """
@@ -85,7 +117,7 @@ class LoggingDevice:
     def base_topic(self) -> str:
         return self.__base_topic
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         device,
         uuid: UUID,
@@ -173,7 +205,7 @@ class GenericLogger(LoggingDevice):
                 sender=self.uuid,
                 sid=0,
                 topic=self.base_topic,
-                value=Decimal(data),
+                value=to_decimal(data),
                 unit="",
             ),
         )
@@ -247,7 +279,7 @@ class Keysight34470ALogger(LoggingDevice):
                 sender=self.uuid,
                 sid=0,
                 topic=self.base_topic,
-                value=Decimal(data),
+                value=to_decimal(data),
                 unit="",
             ),
         )
@@ -280,7 +312,7 @@ class KeithleyDMM6500Logger(LoggingDevice):
                 sender=self.uuid,
                 sid=0,
                 topic=self.base_topic,
-                value=Decimal(data),
+                value=to_decimal(data),
                 unit="",
             ),
         )
@@ -297,7 +329,7 @@ class LDT5948Logger(LoggingDevice):
         """
         return "ldt5948"
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         timeout: int,
         baudrate: int,
@@ -324,7 +356,10 @@ class LDT5948Logger(LoggingDevice):
         ) = await self.device.get_pid_constants()  # pylint: disable=invalid-name
         uptime = await self.device.query("TIME?")
 
-        return f"LDT5948 {await self.device.get_id()}; PID constants Kp={kp:.2f}; Ki={ki:.3f}; Kd={kd:.3f}; Uptime={uptime}"
+        return (
+            f"LDT5948 {await self.device.get_id()}; PID constants Kp={kp:.2f}; Ki={ki:.3f}; Kd={kd:.3f};"
+            f" Uptime={uptime}"
+        )
 
     async def read(self) -> tuple[DataEvent, DataEvent, DataEvent, DataEvent]:
         await super().read()
@@ -466,13 +501,16 @@ class Keithley26xxBLogger(LoggingDevice):
         fw_version = await self.device.get_fw_version()
         sn = await self.device.get_serial_number()
         model = await self.device.get_model()
-        return f"K{model} Serial {sn}; FW {fw_version}; Cal date ChA={cal_date[0]}; ChB={cal_date[1]}; Next Cal due ChA={cal_due_date[0]}; ChB={cal_due_date[1]}"
+        return (
+            f"K{model} Serial {sn}; FW {fw_version}; Cal date ChA={cal_date[0]}; ChB={cal_date[1]};"
+            f" Next Cal due ChA={cal_due_date[0]}; ChB={cal_due_date[1]}"
+        )
 
     async def read(self) -> tuple[DataEvent, ...]:
         await super().read()
         data = await self.device.query("print(smua.measure.i())")
 
-        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=Decimal(data), unit="A"),)
+        return (DataEvent(sender=self.uuid, sid=0, topic=self.base_topic, value=to_decimal(data), unit="A"),)
 
 
 class TinkerforgeLogger(LoggingDevice):
@@ -530,7 +568,7 @@ class Fluke1524Logger(LoggingDevice):
         """
         return "fluke1524"
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         timeout: int,
         baudrate: int,
@@ -558,14 +596,14 @@ class Fluke1524Logger(LoggingDevice):
                 sender=self.uuid,
                 sid=0,
                 topic=self.base_topic + "/temperature/channel1",
-                value=Decimal(temperature1),
+                value=to_decimal(temperature1),
                 unit="°C",
             ),
             DataEvent(
                 sender=self.uuid,
                 sid=1,
                 topic=self.base_topic + "/temperature/channel2",
-                value=Decimal(temperature2),
+                value=to_decimal(temperature2),
                 unit="°C",
             ),
         )
@@ -626,7 +664,7 @@ class EE07Logger(LoggingDevice):
         """
         return "ee07"
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         timeout: int,
         baudrate: int,
@@ -653,14 +691,14 @@ class EE07Logger(LoggingDevice):
                 sender=self.uuid,
                 sid=0,
                 topic=self.base_topic + "/humidity",
-                value=Decimal(humidity),
+                value=to_decimal(humidity),
                 unit="%rH",
             ),
             DataEvent(
                 sender=self.uuid,
                 sid=1,
                 topic=self.base_topic + "/temperature",
-                value=Decimal(temperature),
+                value=to_decimal(temperature),
                 unit="°C",
             ),
         )
