@@ -4,62 +4,55 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from typing import Any
 from uuid import UUID
 
+from devices.connections import Connection
 from logger.logger import DataEvent
 
 UUID_A = UUID("15d9f44c-03b4-465b-b596-4cb623d57199")
 
 
-class FakeConnection:  # pylint: disable=missing-function-docstring
-    """Stand-in for the transports. Replies are looked up by the last command written."""
+class FakeConnection(Connection):  # pylint: disable=missing-function-docstring
+    """
+    An in-memory connection. The reply to a command is looked up by the last command written. Commands and replies
+    are stored without terminators, the base class adds and removes them, like for a real connection.
+    """
 
-    def __init__(self, replies: dict[str, str | bytes] | None = None, terminator: str = "\n") -> None:
+    @property
+    def is_connected(self) -> bool:
+        return self.connected
+
+    def __init__(self, replies: dict[str, str | bytes] | None = None, connected: bool = True) -> None:
+        super().__init__(timeout=1.0)
         self.replies = {} if replies is None else replies
-        self.terminator = terminator
-        self.written: list[str] = []
-        self.timeout = 1.0
-        self.wait_delay: float | None = None
+        self.connected = connected
+        self.written: list[str] = []  # the commands without the write terminator
+        self.raw_written: list[bytes] = []
 
-    @staticmethod
-    def _to_str(cmd: str | bytes) -> str:
-        return cmd.decode("ascii") if isinstance(cmd, bytes) else cmd
+    def __str__(self) -> str:
+        return "FakeConnection"
 
-    async def connect(self) -> None:
-        pass
+    async def _connect(self) -> None:
+        self.connected = True
 
-    async def disconnect(self) -> None:
-        pass
+    async def _disconnect(self) -> None:
+        self.connected = False
 
-    def set_wait_delay(self, value: float) -> None:
-        self.wait_delay = value
+    async def _write(self, data: bytes, timeout: float) -> None:
+        self.raw_written.append(data)
+        self.written.append(data.removesuffix(self.write_terminator).decode("utf-8"))
 
-    async def write(self, cmd: str | bytes) -> None:
-        self.written.append(self._to_str(cmd).rstrip("\r\n"))
-
-    async def read(self, **_kwargs: Any) -> bytes:
+    def __reply(self) -> bytes:
         if not self.written or self.written[-1] not in self.replies:
             raise TimeoutError("No reply")  # Like a real instrument, that does not answer
         reply = self.replies[self.written[-1]]
-        if isinstance(reply, str):
-            reply = (reply + self.terminator).encode("utf-8")
-        return reply
+        return (reply.encode("utf-8") if isinstance(reply, str) else reply) + self.read_terminator
 
+    async def _read_until(self, terminator: bytes, timeout: float) -> bytes:
+        return self.__reply()
 
-class FakeStrConnection(FakeConnection):
-    """Like FakeConnection, but returns strings like AsyncSerial."""
-
-    async def read(self, **_kwargs: Any) -> str:  # type: ignore[override]
-        return (await super().read()).decode("utf-8")
-
-
-def as_transport(fake: FakeConnection) -> Any:
-    """
-    The drivers are typed with the transports they are used with. The fake has the same interface, so hand it to the
-    drivers as one of them.
-    """
-    return fake
+    async def _read_exactly(self, length: int, timeout: float) -> bytes:
+        return self.__reply()[:length]
 
 
 class FakeDevice:  # pylint: disable=missing-function-docstring

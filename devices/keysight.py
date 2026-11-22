@@ -20,33 +20,29 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any, overload
+from typing import overload
 
-from async_gpib import AsyncGpib
-
-from devices.async_ethernet import AsyncEthernet
+from devices.connections import Connection
 
 
 class Hp3458A:
-    def __init__(self, connection: AsyncGpib) -> None:
+    def __init__(self, connection: Connection) -> None:
         self.__conn = connection
 
         self.__logger = logging.getLogger(__name__)
 
     async def get_id(self) -> str:
-        await self.write("ID?")
-        return await self.read()
+        return await self.query("ID?")
 
     async def write(self, cmd: str) -> None:
         self.__logger.debug("Writing: %s", cmd)
-        await self.__conn.write((cmd + "\n").encode("ascii"))
+        await self.__conn.write(cmd.encode("ascii"))
 
     async def read(self) -> str:
-        return (await self.__conn.read()).strip().decode("utf-8")
+        return (await self.__conn.read()).decode("utf-8").strip()
 
     async def query(self, cmd: str) -> str:
-        await self.write(cmd)
-        return await self.read()
+        return (await self.__conn.query(cmd.encode("ascii"))).decode("utf-8").strip()
 
     async def beep(self) -> None:
         await self.write("BEEP")
@@ -117,7 +113,7 @@ class Hp3458A:
 
 
 class Keysight34470A:
-    def __init__(self, connection: AsyncEthernet) -> None:
+    def __init__(self, connection: Connection) -> None:
         self.__conn = connection
 
         self.__logger = logging.getLogger(__name__)
@@ -136,30 +132,18 @@ class Keysight34470A:
         await self.__conn.disconnect()
 
     async def write(self, cmd: str) -> None:
-        await self.__conn.write((cmd + "\n").encode("ascii"))
+        await self.__conn.write(cmd.encode("ascii"))
 
     @overload
-    async def __read(self, length: None = None, **kwargs: Any) -> str: ...
+    async def query(self, cmd: str, length: None = None, timeout: float | None = None) -> str: ...
 
     @overload
-    async def __read(self, length: int, **kwargs: Any) -> bytes: ...
+    async def query(self, cmd: str, length: int, timeout: float | None = None) -> bytes: ...
 
-    async def __read(self, length: int | None = None, **kwargs: Any) -> str | bytes:
-        # Strip the separator "\n". If the length is given, the data is binary and returned as bytes.
-        if length is None:  # pylint: disable=no-else-return
-            return (await self.__conn.read(**kwargs))[:-1].decode("utf-8")
-        else:
-            return (await self.__conn.read(length=length + 1, **kwargs))[:-1]
-
-    @overload
-    async def query(self, cmd: str, length: None = None, **kwargs: Any) -> str: ...
-
-    @overload
-    async def query(self, cmd: str, length: int, **kwargs: Any) -> bytes: ...
-
-    async def query(self, cmd: str, length: int | None = None, **kwargs: Any) -> str | bytes:
-        await self.write(cmd)
-        return await self.__read(length, **kwargs)
+    async def query(self, cmd: str, length: int | None = None, timeout: float | None = None) -> str | bytes:
+        """Text replies are returned as str. If the length is given, the reply is binary and returned as bytes."""
+        result = await self.__conn.query(cmd.encode("ascii"), length=length, timeout=timeout)
+        return result if length is not None else result.decode("utf-8")
 
     async def get_id(self) -> str:
         # Catch AttributeError if not connected
@@ -220,7 +204,7 @@ class Keysight34470A:
         # TODO: Catch special SCPI values
         # TODO: Catch +-9.9E37 = +-Inf or raise an error
         # TODO: Catch 9.91E37 = NaN or raise an error
-        return await asyncio.wait_for(self.__read(), timeout=10)
+        return (await self.__conn.read()).decode("utf-8")
 
     async def fetch(self) -> str:
         return await self.query("FETCH?")

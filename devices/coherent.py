@@ -21,17 +21,18 @@ from decimal import Decimal, InvalidOperation
 from types import TracebackType
 from typing import Self, Type
 
-from devices.async_serial import AsyncSerial
+from devices.connections import Connection
 
 
 class Wavemaster:
     @property
-    def connection(self) -> AsyncSerial:
+    def connection(self) -> Connection:
         return self.__conn
 
-    def __init__(self, connection: AsyncSerial) -> None:
+    def __init__(self, connection: Connection) -> None:
         self.__conn = connection
-        self.__lock: asyncio.Lock | None = None
+        self.__conn.read_terminator = b"\n"
+        self.__conn.write_terminator = b"\n"
 
     async def __aenter__(self) -> Self:
         await self.connect()
@@ -43,23 +44,16 @@ class Wavemaster:
         await self.disconnect()
 
     async def read(self) -> str:
-        # Strip the separator
-        return (await self.__conn.read())[:-1]
+        return (await self.__conn.read()).decode("utf-8")
 
     async def write(self, cmd: str) -> None:
-        await self.__conn.write(cmd + "\n")
+        await self.__conn.write(cmd.encode("utf-8"))
 
     async def query(self, cmd: str) -> str:
-        if self.__lock is None:
-            raise ConnectionError("Not connected.")
-        async with self.__lock:
-            await self.write(cmd)
-            result = await self.read()
-            return result
+        return (await self.__conn.query(cmd.encode("utf-8"))).decode("utf-8")
 
     async def connect(self) -> None:
         await self.__conn.connect()
-        self.__lock = asyncio.Lock()
         await self.write("")  # Flush input buffer of the device
         while "device output buffer not empty":
             try:

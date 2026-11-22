@@ -23,9 +23,7 @@ from decimal import Decimal, InvalidOperation
 from enum import Enum, unique
 from typing import TypeAlias
 
-from prologix_gpib_async import AsyncPrologixGpibEthernetController
-
-from devices.async_serial import AsyncSerial
+from devices.connections import Connection
 
 
 class InvalidDataError(ValueError):
@@ -61,29 +59,22 @@ class Fluke1590:  # pylint: disable=too-many-public-methods
 
     UNIT_CONVERSION = {"O": "Ω"}
 
-    def __init__(self, connection: AsyncPrologixGpibEthernetController) -> None:
+    def __init__(self, connection: Connection) -> None:
         self.__conn = connection
-        self.__lock: asyncio.Lock | None = None
+        self.__conn.read_terminator = b"\n"
+        self.__conn.write_terminator = b"\n"
 
     async def read(self) -> str:
-        # Strip the separator "\n"
-        return (await self.__conn.read())[:-1].decode("utf-8")
+        return (await self.__conn.read()).decode("utf-8")
 
     async def write(self, cmd: str) -> None:
-        await self.__conn.write((cmd + "\n").encode("ascii"))
+        await self.__conn.write(cmd.encode("ascii"))
 
     async def query(self, cmd: str) -> str:
-        if self.__lock is None:
-            raise ConnectionError("Not connected.")
-        async with self.__lock:
-            await self.write(cmd)
-            result = await self.read()
-            return result
+        return (await self.__conn.query(cmd.encode("ascii"))).decode("utf-8")
 
     async def connect(self) -> None:
         await self.__conn.connect()
-        self.__conn.set_wait_delay(1)
-        self.__lock = asyncio.Lock()
 
     async def disconnect(self) -> None:
         await self.__conn.disconnect()
@@ -228,29 +219,22 @@ class Fluke1590:  # pylint: disable=too-many-public-methods
 
 
 class Fluke1524:
-    def __init__(self, conn: AsyncSerial) -> None:
+    def __init__(self, conn: Connection) -> None:
         self.__conn = conn
-        self.__conn.separator = b"\r"
-        self.__lock: asyncio.Lock | None = None
+        self.__conn.read_terminator = b"\r"
+        self.__conn.write_terminator = b"\r\n"
 
     async def read(self) -> str:
-        # Strip the separator "\n"
-        return (await self.__conn.read())[:-1]
+        return (await self.__conn.read()).decode("utf-8")
 
     async def write(self, cmd: str) -> None:
-        await self.__conn.write(cmd + "\r\n")
+        await self.__conn.write(cmd.encode("utf-8"))
 
     async def query(self, cmd: str) -> str:
-        if self.__lock is None:
-            raise ConnectionError("Not connected.")
-        async with self.__lock:
-            await self.write(cmd)
-            result = await self.read()
-            return result
+        return (await self.__conn.query(cmd.encode("utf-8"))).decode("utf-8")
 
     async def connect(self) -> None:
         await self.__conn.connect()
-        self.__lock = asyncio.Lock()
         await self.write("")  # Flush input buffer of the device
         try:
             await asyncio.wait_for(self.read(), timeout=0.1)  # 100ms timeout
