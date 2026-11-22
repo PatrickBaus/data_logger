@@ -475,6 +475,7 @@ class Keithley2002ScannerLogger(Keithley2002Logger):
         self.__active_channels = active_channels
 
     async def read(self) -> tuple[DataEvent, ...]:
+        await LoggingDevice.read(self)  # Only prints the logging output, it does not read.
         # pylint: disable=consider-using-generator
         return tuple([await self.query_channel(channel) for channel in self.__active_channels])
 
@@ -630,6 +631,7 @@ class Fluke1590Logger(LoggingDevice):
         super().__init__(device, *args, **kwargs)
 
     async def read(self) -> tuple[DataEvent]:
+        await super().read()
         channel, value, unit, _ = await self.device.read_temperature()
         return (
             DataEvent(
