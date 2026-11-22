@@ -206,6 +206,9 @@ Errors are logged to the console and to `errors.log` in the working directory.
 - **Invalid readings and timeouts** are logged and the round is skipped. The next round starts immediately.
 - **Connection errors**, for example an instrument that is switched off, a USB adapter that is unplugged or a network
   outage, disconnect all instruments. The logger reconnects after `reconnect_interval` seconds and keeps trying.
+- **Invalid data during the startup**, while the instruments are connected and initialized and the header is written,
+  is handled like a connection error, but only 3 times in a row. Then the logger stops with an error. A typical cause
+  is a stale reply left in the buffer of an instrument, which shifts all following replies.
 - **MQTT broker outages** do not stop the logging. The data is queued and published, when the broker is back.
   Values, that can never be published (for example a device without a `base_topic`), are logged and dropped.
 

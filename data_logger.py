@@ -46,6 +46,9 @@ from logger.logger import DataEvent
 
 DEFAULT_WAIT_TIMEOUT = 10  # in seconds
 DEFAULT_RECONNECT_INTERVAL = 5  # in seconds
+# Retries after invalid data during the startup, before the logger gives up. Typically caused by a stale reply in the
+# buffer of an instrument, which shifts all following replies.
+MAX_STARTUP_RETRIES = 3
 LOG_LEVEL = logging.INFO
 ERROR_LOG_FMT = "%(asctime)s %(name)-12s %(levelname)-8s %(message)s"
 
@@ -176,9 +179,15 @@ class DataGenerator:
             # daemon, which reconnects after the reconnect interval.
 
 
+def _describe(exc: BaseException) -> str:
+    """Describe an error for the log. Some errors have no message, and the log messages add their own period."""
+    return (str(exc) or type(exc).__name__).rstrip(".")
+
+
 class LoggingDaemon:  # pylint: disable=too-few-public-methods
     """
-    Connects the devices with the endpoints and reconnects them, if the connection is lost.
+    Connects the devices with the endpoints and reconnects them, if the connection is lost or the startup fails with
+    invalid data.
     """
 
     def __init__(
@@ -194,6 +203,7 @@ class LoggingDaemon:  # pylint: disable=too-few-public-methods
         }
         self.__time_interval = time_interval
         self.__reconnect_interval = reconnect_interval
+        self.__startup_failures = 0
 
         self.__logger = logging.getLogger(__name__)
 
@@ -208,6 +218,7 @@ class LoggingDaemon:  # pylint: disable=too-few-public-methods
             file_endpoint = self.__endpoints.get("file")
             if isinstance(file_endpoint, Filewriter):
                 await file_endpoint.write(await data_generator.get_header())
+            self.__startup_failures = 0  # The startup succeeded
 
             async for timestamp, data in data_generator.read_sensors(self.__time_interval):
                 for queue in endpoint_queues:
@@ -217,7 +228,13 @@ class LoggingDaemon:  # pylint: disable=too-few-public-methods
     async def run(self) -> None:
         """
         Run the logger until it is cancelled or receives SIGHUP, SIGTERM or SIGINT. Connection errors cause a
-        reconnect after `reconnect_interval` seconds.
+        reconnect after `reconnect_interval` seconds. Invalid data during the startup does the same, but only
+        `MAX_STARTUP_RETRIES` times in a row.
+
+        Raises
+        ------
+        ValueError
+            If the startup failed with invalid data more than `MAX_STARTUP_RETRIES` times in a row
         """
         # Catch signals and shutdown. Cancel this task, not only the current attempt, so that a signal also stops the
         # logger while it is waiting to reconnect.
@@ -233,9 +250,26 @@ class LoggingDaemon:  # pylint: disable=too-few-public-methods
                     await self._read_sensors()
                 except (OSError, EOFError) as exc:
                     self.__logger.error(
-                        "Connection error: %s. Reconnecting in %.0f s.",
-                        (str(exc) or type(exc).__name__).rstrip("."),
+                        "Connection error: %s. Reconnecting in %g s.", _describe(exc), self.__reconnect_interval
+                    )
+                    await asyncio.sleep(self.__reconnect_interval)
+                except (ValueError, InvalidOperation) as exc:
+                    # The read loop handles invalid data itself, so this comes from connecting, initializing the
+                    # instruments or writing the header. Typically a stale reply in the buffer of an instrument.
+                    self.__startup_failures += 1
+                    if self.__startup_failures > MAX_STARTUP_RETRIES:
+                        self.__logger.error(
+                            "Invalid data during the startup: %s. Giving up after %d retries.",
+                            _describe(exc),
+                            MAX_STARTUP_RETRIES,
+                        )
+                        raise
+                    self.__logger.error(
+                        "Invalid data during the startup: %s. Retrying in %g s (retry %d of %d).",
+                        _describe(exc),
                         self.__reconnect_interval,
+                        self.__startup_failures,
+                        MAX_STARTUP_RETRIES,
                     )
                     await asyncio.sleep(self.__reconnect_interval)
         except asyncio.CancelledError:

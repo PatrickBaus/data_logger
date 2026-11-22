@@ -188,3 +188,19 @@ def test_k2002_opc_waits_for_the_reply() -> None:
 def test_k2002_gpib_functions_need_a_gpib_connection(method: str, args: tuple[()]) -> None:
     with pytest.raises(TypeError, match="is not a GPIB connection"):
         asyncio.run(getattr(Keithley2002(FakeConnection()), method)(*args))
+
+
+@pytest.mark.parametrize(
+    "reply",
+    ["15.00,0.003", "15.00,0.003,2.000,1", "a,b,c", "ILX Lightwave,LDT-5948,59481234,1.30"],
+    ids=["too-few", "too-many", "not-numbers", "stale-idn-reply"],
+)
+def test_ldt5948_invalid_pid_constants(reply: str) -> None:
+    """The constants are unpacked into exactly three values, an invalid reply raises a ValueError."""
+    with pytest.raises(ValueError):
+        asyncio.run(LDT5948(FakeConnection({"PID?": reply})).get_pid_constants())
+
+
+def test_ldt5948_pid_constants() -> None:
+    kp, ki, kd = asyncio.run(LDT5948(FakeConnection({"PID?": "15.00,0.003,2.000"})).get_pid_constants())
+    assert (kp, ki, kd) == (Decimal("15.00"), Decimal("0.003"), Decimal("2.000"))

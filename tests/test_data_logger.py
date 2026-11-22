@@ -126,3 +126,68 @@ def test_main_without_config_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     with pytest.raises(SystemExit) as exc_info:
         data_logger.main(["-c", "does_not_exist.yml"])
     assert exc_info.value.code == 1
+
+
+@pytest.fixture(name="sleeps")
+def fixture_sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    """Skip the reconnect delays of the daemon and record them."""
+    sleeps: list[float] = []
+    real_sleep = asyncio.sleep
+
+    async def sleep(delay: float, *args: Any) -> None:
+        if delay != 0:  # asyncio.sleep(0) of the fake sensor
+            sleeps.append(delay)
+        return await real_sleep(0, *args)
+
+    monkeypatch.setattr(asyncio, "sleep", sleep)
+    return sleeps
+
+
+def test_daemon_gives_up_after_invalid_startup_data(sleeps: list[float]) -> None:
+    """Invalid data during the startup, like a stale *IDN? reply, is retried 3 times, then the logger stops."""
+    sensor = FakeSensor(connect_errors=[ValueError("stale reply")] * 10)
+    daemon = LoggingDaemon(logging_devices=[sensor], endpoints={}, reconnect_interval=7)
+    with pytest.raises(ValueError, match="stale reply"):
+        asyncio.run(daemon.run())
+    assert sensor.connect_calls == 1 + data_logger.MAX_STARTUP_RETRIES
+    assert sleeps == [7] * data_logger.MAX_STARTUP_RETRIES
+    assert not sensor.connected
+
+
+def test_daemon_recovers_from_a_stale_reply(sleeps: list[float]) -> None:
+    sensor = FakeSensor(
+        [returns(1), raises(RuntimeError("stop the daemon"))],
+        connect_errors=[ValueError("stale reply"), InvalidOperation(), None],
+    )
+    daemon = LoggingDaemon(logging_devices=[sensor], endpoints={}, reconnect_interval=7)
+    with pytest.raises(RuntimeError, match="stop the daemon"):  # The startup succeeded and the logger read the data
+        asyncio.run(daemon.run())
+    assert sensor.connect_calls == 3
+    assert sleeps == [7, 7]
+
+
+def test_invalid_header_data_is_a_startup_failure(sleeps: list[float], tmp_path: Path) -> None:
+    sensor = FakeSensor(
+        [returns(1), raises(RuntimeError("stop the daemon"))],
+        header_errors=[ValueError("stale reply"), None],
+    )
+    endpoints = {"file": {"filename": str(tmp_path / "log.csv"), "descriptor": "Test"}}
+    daemon = LoggingDaemon(logging_devices=[sensor], endpoints=endpoints, reconnect_interval=7)
+    with pytest.raises(RuntimeError, match="stop the daemon"):
+        asyncio.run(daemon.run())
+    assert sensor.header_calls == 2
+    assert sleeps == [7]
+
+
+def test_startup_failures_are_counted_again_after_a_successful_startup(sleeps: list[float]) -> None:
+    """Only consecutive failures count. A stale reply days later, after a reconnect, gets its own retries."""
+    stale = ValueError("stale reply")
+    sensor = FakeSensor(
+        [returns(1), raises(ConnectionResetError("connection lost")), returns(2), raises(RuntimeError("stop"))],
+        connect_errors=[stale, stale, stale, None, stale, stale, stale, None],
+    )
+    daemon = LoggingDaemon(logging_devices=[sensor], endpoints={}, reconnect_interval=7)
+    with pytest.raises(RuntimeError, match="stop"):
+        asyncio.run(daemon.run())
+    assert sensor.connect_calls == 8
+    assert len(sleeps) == 3 + 1 + 3  # retries, the reconnect after the lost connection, retries
