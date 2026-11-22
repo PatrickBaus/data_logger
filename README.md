@@ -92,8 +92,24 @@ are optional for every device:
 |`device_name`|A name used in the log messages. Defaults to the instrument id (`*IDN?`).|
 |`column_names`|The column names of the CSV header, one per value returned by the device.|
 |`initial_commands`|Commands sent once after connecting, for example to set the range or the integration time.|
-|`post_read_commands`|Commands sent after each reading.|
+|`post_read_commands`|Commands sent after a reading. See [Post-read commands](#post-read-commands).|
 |`base_topic`|The MQTT topic. Devices with several values publish to sub-topics like `<base_topic>/temperature`. Required for the `mqtt` endpoint.|
+
+### Post-read commands
+A post-read command is either a plain string, which is sent after every reading, or a dict with these keys:
+
+|Key|Description|
+|--|--|
+|`cmd`|The command. Required.|
+|`delay`|Wait this many seconds after the start of the logger before sending the command. A number or an arithmetic expression like `"60*60*24"`, using `+ - * / // % **`.|
+|`repeat`|Send the command this many times. Default: -1, which sends it after every reading.|
+
+```yaml
+post_read_commands: [
+    "INIT",  # after every reading
+    {cmd: "SYSTem:BEEP", delay: "60*60*24", repeat: 1},  # once, a day after the start
+]
+```
 
 ## Examples
 ### A DMM logging to a file
