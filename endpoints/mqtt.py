@@ -213,7 +213,8 @@ class MqttWriter:
                     *host,
                 )
             except aiomqtt.MqttError as exc:
-                error = re.search(r"\[Errno (\d+)]", str(exc))
+                # Some errno values are negative, like -3 (EAI_AGAIN) for a failed name resolution
+                error = re.search(r"\[Errno (-?\d+)]", str(exc))
                 if error is not None:
                     error_code = int(error.group(1))
                     if error_code == 111:

@@ -67,27 +67,43 @@ def test_mqtt_invalid_topics_are_rejected(topic: str) -> None:
 
 
 class FakeMqttClient:  # pylint: disable=missing-function-docstring
-    """Stand-in for aiomqtt.Client."""
+    """
+    Stand-in for aiomqtt.Client. The errors in `connect_errors` and `publish_errors` are raised by the connection
+    attempts and the publications one after another.
+    """
 
     published: list[tuple[str, str]] = []
+    hosts: list[tuple[str, int]] = []
+    connect_errors: list[BaseException] = []
+    publish_errors: list[BaseException] = []
 
-    def __init__(self, **_kwargs: Any) -> None:
-        pass
+    def __init__(self, hostname: str, port: int, **_kwargs: Any) -> None:
+        self.hosts.append((hostname, port))
 
     async def __aenter__(self) -> Self:
+        if self.connect_errors:
+            raise self.connect_errors.pop(0)
         return self
 
     async def __aexit__(self, *_args: Any) -> None:
         pass
 
     async def publish(self, topic: str, payload: str, qos: int) -> None:  # pylint: disable=unused-argument
+        if self.publish_errors:
+            raise self.publish_errors.pop(0)
         self.published.append((topic, payload))
 
 
-def test_mqtt_invalid_event_does_not_block_the_queue(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An event with an empty topic used to be retried forever and block the worker."""
-    FakeMqttClient.published = []
+@pytest.fixture(name="mqtt_client")
+def fixture_mqtt_client(monkeypatch: pytest.MonkeyPatch) -> type[FakeMqttClient]:
+    FakeMqttClient.published, FakeMqttClient.hosts = [], []
+    FakeMqttClient.connect_errors, FakeMqttClient.publish_errors = [], []
     monkeypatch.setattr(aiomqtt, "Client", FakeMqttClient)
+    return FakeMqttClient
+
+
+def test_mqtt_invalid_event_does_not_block_the_queue(mqtt_client: type[FakeMqttClient]) -> None:
+    """An event with an empty topic used to be retried forever and block the worker."""
 
     async def test() -> None:
         writer = MqttWriter(hosts="localhost", username=None, password=None, number_of_workers=1)
@@ -97,6 +113,50 @@ def test_mqtt_invalid_event_does_not_block_the_queue(monkeypatch: pytest.MonkeyP
             await asyncio.wait_for(queue.join(), timeout=1)
 
     asyncio.run(test())
-    assert [topic for topic, _ in FakeMqttClient.published] == ["sensors/a", "sensors/b"]
-    assert '"value": 2.5' in FakeMqttClient.published[0][1]
-    assert '"timestamp": 1767323045.0' in FakeMqttClient.published[0][1]
+    assert [topic for topic, _ in mqtt_client.published] == ["sensors/a", "sensors/b"]
+    assert '"value": 2.5' in mqtt_client.published[0][1]
+    assert '"timestamp": 1767323045.0' in mqtt_client.published[0][1]
+
+
+def test_mqtt_worker_reconnects_after_errors(
+    mqtt_client: type[FakeMqttClient], monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Each kind of error is logged and the worker reconnects, cycling through the brokers. No data is lost."""
+    sleeps: list[float] = []
+    real_sleep = asyncio.sleep
+
+    async def sleep(delay: float) -> None:
+        if delay:
+            sleeps.append(delay)
+        await real_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", sleep)
+    mqtt_client.connect_errors = [
+        aiomqtt.MqttCodeError(5, "Not authorized"),
+        aiomqtt.MqttCodeError(5, "Not authorized"),  # The same error is only logged once
+        ConnectionRefusedError(),
+        aiomqtt.MqttError("[Errno 111] Connection refused"),
+        aiomqtt.MqttError("[Errno -3] Temporary failure in name resolution"),
+        aiomqtt.MqttError("[Errno 113] No route to host"),
+        aiomqtt.MqttError("Operation timed out"),
+        RuntimeError("bug"),
+    ]
+    mqtt_client.publish_errors = [aiomqtt.MqttError("Disconnected during publish")]
+
+    async def test() -> None:
+        writer = MqttWriter(hosts="broker1:1883,broker2", username=None, password=None, number_of_workers=1)
+        async with writer as queue:
+            queue.put_nowait((TIMESTAMP, (event(1, topic="sensors/a"),)))
+            await asyncio.wait_for(queue.join(), timeout=5)
+
+    asyncio.run(test())
+    # The event survived the failed publish
+    assert [topic for topic, _ in mqtt_client.published] == ["sensors/a"]
+    assert mqtt_client.hosts[:4] == [("broker1", 1883), ("broker2", 1883), ("broker1", 1883), ("broker2", 1883)]
+    assert len(sleeps) == 9  # A delay before each of the 9 reconnects
+    messages = [record.getMessage() for record in caplog.records if record.levelname == "ERROR"]
+    assert messages[0].startswith("MQTT error:") and messages[1].startswith("Connection refused by MQTT server")
+    assert sum(message.startswith("MQTT error:") for message in messages) == 1
+    assert "Temporary failure in name resolution of MQTT server (broker1:1883). Retrying." in messages  # 5th attempt
+    assert "Error while publishing data to MQTT broker. Reconnecting." in messages
+    assert messages.count("MQTT Connection error. Retrying.") == 3  # Errno 113, no errno, the failed publish
