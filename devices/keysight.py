@@ -20,12 +20,15 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from typing import Any, overload
+
+from async_gpib import AsyncGpib
 
 from devices.async_ethernet import AsyncEthernet
 
 
 class Hp3458A:
-    def __init__(self, connection) -> None:
+    def __init__(self, connection: AsyncGpib) -> None:
         self.__conn = connection
 
         self.__logger = logging.getLogger(__name__)
@@ -135,16 +138,28 @@ class Keysight34470A:
     async def write(self, cmd: str) -> None:
         await self.__conn.write((cmd + "\n").encode("ascii"))
 
-    async def __read(self, length: int | None = None, **kwargs) -> str:
-        # Strip the separator "\n"
+    @overload
+    async def __read(self, length: None = None, **kwargs: Any) -> str: ...
+
+    @overload
+    async def __read(self, length: int, **kwargs: Any) -> bytes: ...
+
+    async def __read(self, length: int | None = None, **kwargs: Any) -> str | bytes:
+        # Strip the separator "\n". If the length is given, the data is binary and returned as bytes.
         if length is None:  # pylint: disable=no-else-return
             return (await self.__conn.read(**kwargs))[:-1].decode("utf-8")
         else:
             return (await self.__conn.read(length=length + 1, **kwargs))[:-1]
 
-    async def query(self, cmd: str, **kwargs) -> str:
+    @overload
+    async def query(self, cmd: str, length: None = None, **kwargs: Any) -> str: ...
+
+    @overload
+    async def query(self, cmd: str, length: int, **kwargs: Any) -> bytes: ...
+
+    async def query(self, cmd: str, length: int | None = None, **kwargs: Any) -> str | bytes:
         await self.write(cmd)
-        return await self.__read(**kwargs)
+        return await self.__read(length, **kwargs)
 
     async def get_id(self) -> str:
         # Catch AttributeError if not connected

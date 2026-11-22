@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import struct
 from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
 
-from devices import LDT5948, Fluke1590, Hp3458A, Keysight34470A
+from devices import LDT5948, Fluke1590, Hp3458A, Keithley26xxB, Keithley2002, KeithleyDMM6500, Keysight34470A
 from devices.fluke import InvalidDataError
 
 from .fakes import FakeConnection, FakeStrConnection
@@ -122,3 +123,17 @@ def test_fluke1590_get_screensaver(reply, expected):
 def test_fluke1590_query_requires_connection():
     with pytest.raises(ConnectionError):
         asyncio.run(Fluke1590(FakeConnection()).query("v"))
+
+
+@pytest.mark.parametrize("driver", [Keysight34470A, KeithleyDMM6500, Keithley26xxB, Keithley2002])
+def test_binary_query_returns_bytes(driver):
+    """A read by length is a binary transfer, like a double with :FORM:DATA REAL,64. It must not be decoded."""
+    raw = struct.pack("d", 10.000012)  # not valid UTF-8
+    device = driver(FakeConnection({"READ?": raw + b"\n", "*IDN?": "MODEL,123"}))
+
+    async def test():
+        return await device.query("READ?", length=8), await device.query("*IDN?")
+
+    binary, text = asyncio.run(test())
+    assert binary == raw and struct.unpack("d", binary) == (10.000012,)
+    assert text == "MODEL,123"
