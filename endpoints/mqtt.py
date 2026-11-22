@@ -64,7 +64,7 @@ class MQTTParams(BaseModel):
         list of tuple of str and int
             A list of (hostname, port) tuples.
         """
-        hosts = value.split(",")
+        hosts = value.split(",") if isinstance(value, str) else [str(host) for host in value]
         if not hosts:
             raise ValueError("No MQTT host given.")
         result = []
