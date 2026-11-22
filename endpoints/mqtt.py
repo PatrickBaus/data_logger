@@ -10,6 +10,7 @@ import itertools
 import logging
 import re
 from types import TracebackType
+from typing import Any
 
 import aiomqtt
 import simplejson as json
@@ -48,20 +49,24 @@ class MQTTParams(BaseModel):
 
     @field_validator("hosts", mode="before")
     @classmethod
-    def ensure_list_of_hosts(cls, value: str) -> list[tuple[str, int]]:
+    def ensure_list_of_hosts(cls, value: str | list[str]) -> list[tuple[str, int]]:
         """
-        Parse
+        Parse the list of MQTT brokers.
+
         Parameters
         ----------
-        value: str
-            Either a single hostname:port string or a comma separated list of hostname:port strings.
+        value: str or list of str
+            Either a single hostname:port string, a comma separated list of hostname:port strings or a (YAML) list of
+            hostname:port strings.
 
         Returns
         -------
         list of tuple of str and int
             A list of (hostname, port) tuples.
         """
-        hosts = value.split(",")
+        hosts = value.split(",") if isinstance(value, str) else [str(host) for host in value]
+        if not hosts:
+            raise ValueError("No MQTT host given.")
         result = []
         for host in hosts:
             host = host.strip()
@@ -92,9 +97,11 @@ class MqttWriter:
         """
         return "mqtt"
 
-    def __init__(self, hosts: str, username: str | None, password: str | None, number_of_workers: int = 5) -> None:
+    def __init__(
+        self, hosts: str | list[str], username: str | None, password: str | None, number_of_workers: int = 5
+    ) -> None:
         self.__mqtt_params = MQTTParams(
-            hosts=hosts,
+            hosts=hosts,  # type: ignore[arg-type]  # converted by the validator
             username=username,
             password=password,
         )
@@ -104,7 +111,19 @@ class MqttWriter:
         self.__logger = logging.getLogger(__name__)
 
     @staticmethod
-    def _convert_to_json(timestamp: datetime.datetime, event: DataEvent):
+    def _convert_to_json(timestamp: datetime.datetime, event: DataEvent) -> tuple[str, str]:
+        """
+        Convert an event to a (topic, JSON payload) tuple.
+
+        Raises
+        ------
+        ValueError
+            If the topic is not a valid MQTT topic to publish to. Publishing to it would fail every time.
+        TypeError
+            If the value cannot be serialized
+        """
+        if not event.topic or "#" in event.topic or "+" in event.topic:
+            raise ValueError(f"Invalid MQTT topic '{event.topic}'. Is the 'base_topic' of the device configured?")
         payload = {
             "timestamp": timestamp.timestamp(),
             "uuid": str(event.sender),
@@ -113,6 +132,19 @@ class MqttWriter:
             "unit": event.unit,
         }
         return event.topic, json.dumps(payload, use_decimal=True)
+
+    def _convert_events(self, timestamp: datetime.datetime, events: tuple[DataEvent, ...]) -> list[tuple[str, str]]:
+        """
+        Convert the events to (topic, payload) tuples. Events, that cannot be published are logged and dropped, so they
+        do not block the queue.
+        """
+        payloads = []
+        for event in events:
+            try:
+                payloads.append(self._convert_to_json(timestamp, event))
+            except (TypeError, ValueError) as exc:
+                self.__logger.error("Dropping event %r: %s", event, exc)
+        return payloads
 
     @staticmethod
     def _calculate_timeout(last_reconnect_attempt: float, reconnect_interval: float) -> float:
@@ -143,7 +175,7 @@ class MqttWriter:
         reconnect_interval: int, default=5
             The time in seconds to wait between connection attempts.
         """
-        error_code = 0  # 0 = success
+        error_code: Any = 0  # 0 = success, otherwise an errno or an MQTT reason code
         item: tuple[datetime.datetime, tuple[DataEvent, ...]] | None = None
         last_reconnect_attempt = asyncio.get_running_loop().time() - reconnect_interval
         for host in itertools.cycle(self.__mqtt_params.hosts):
@@ -167,20 +199,12 @@ class MqttWriter:
                         if item is None:
                             # only get new data if we have pushed everything to the broker
                             item = await self.__write_queue.get()
-                        try:
-                            timestamp, events = item
-                            payloads = [self._convert_to_json(timestamp, event) for event in events]
-                        except TypeError:
-                            self.__logger.exception("Error while serializing DataEvent: %s.", item)
-                            item = None  # Drop the event
-                            self.__write_queue.task_done()
-                        else:
-                            for topic, payload in payloads:
-                                # self.__logger.info("Going to publish: %s to %s", payload, topic)
-                                await mqtt_client.publish(topic, payload=payload, qos=2)
-                            item = None  # Get a new event to publish
-                            self.__write_queue.task_done()
-                            error_code = 0  # 0 = success
+                        timestamp, events = item
+                        for topic, payload in self._convert_events(timestamp, events):
+                            await mqtt_client.publish(topic, payload=payload, qos=2)
+                        item = None  # Get a new event to publish
+                        self.__write_queue.task_done()
+                        error_code = 0  # 0 = success
             except aiomqtt.MqttCodeError as exc:
                 # Only log an error once
                 if error_code != exc.rc:
@@ -232,7 +256,9 @@ class MqttWriter:
         except asyncio.TimeoutError:
             self.__logger.error("Timeout while flushing the MQTT writer.")
 
-        # Stop running tasks
+        # Stop running tasks and wait for them, so they are not destroyed while pending
         for task in self.__running_tasks:
             task.cancel()
+        await asyncio.gather(*self.__running_tasks, return_exceptions=True)
+        self.__running_tasks.clear()
         self.__logger.info("MQTT endpoint at '%s' closed.", self.__mqtt_params.hosts)

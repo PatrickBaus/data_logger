@@ -116,15 +116,21 @@ class Fluke1590:  # pylint: disable=too-many-public-methods
         except ValueError:
             # Raised if the regex does not match, and therefore we have no values to unpack
             raise InvalidDataError(f"The device {self} returned invalid data: '{result}'") from None
+        try:
+            unit = self.UNIT_CONVERSION[unit]
+        except KeyError:
+            raise InvalidDataError(f"The device {self} returned an unknown unit: '{result}'") from None
+        now = datetime.now(timezone.utc)
         if date is not None and time is not None:
-            timestamp = datetime.strptime(f"{date} {time}", "%m-%d-%y %H:%M:%S")
+            timestamp = datetime.strptime(f"{date} {time}", "%m-%d-%y %H:%M:%S").replace(tzinfo=timezone.utc)
         elif date is None and time is not None:
-            timestamp = datetime.strptime(time, "%H:%M:%S")
+            # Only the time is returned, use the current date
+            timestamp = datetime.combine(now.date(), datetime.strptime(time, "%H:%M:%S").time(), tzinfo=timezone.utc)
         elif date is not None and time is None:
-            timestamp = datetime.strptime(date, "%m-%d-%y")
+            timestamp = datetime.strptime(date, "%m-%d-%y").replace(tzinfo=timezone.utc)
         else:
-            timestamp = datetime.now(timezone.utc)
-        return int(channel) - 1, Decimal(value), self.UNIT_CONVERSION[unit], timestamp
+            timestamp = now
+        return int(channel) - 1, Decimal(value), unit, timestamp
 
     async def read_channel(self, channel: int) -> str:
         # The manual states, no more than 5 commands per second (see 8.3 Digital Interface Commands in the manual)
@@ -157,7 +163,7 @@ class Fluke1590:  # pylint: disable=too-many-public-methods
             await self.write(f"scrs=on & scrt={int(timeout)//60}")
 
     async def get_screensaver(self) -> int:
-        enabled = await self.query("scrs")
+        enabled = (await self.query("scrs")).strip().upper().endswith("ON")
         if not enabled:
             return 0
 

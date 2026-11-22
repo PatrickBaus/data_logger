@@ -1,3 +1,5 @@
+"""File endpoint, that writes the data to a CSV file"""
+
 from __future__ import annotations
 
 import asyncio
@@ -14,6 +16,10 @@ from logger.logger import DataEvent
 
 
 class Filewriter:
+    """
+    Consumer takes data and appends it to a CSV file.
+    """
+
     @classmethod
     def driver(cls) -> str:
         """
@@ -73,7 +79,8 @@ class Filewriter:
             # Stop running tasks
             for task in self.__running_tasks:
                 task.cancel()
-            results = await asyncio.gather(*self.__running_tasks, self.__filehandle.close(), return_exceptions=True)
+            results = await asyncio.gather(*self.__running_tasks, return_exceptions=True)
+            self.__running_tasks.clear()
             for result in results:
                 if isinstance(result, Exception):
                     self.__logger.error("Error during shutdown of the file writer", exc_info=result)
@@ -85,7 +92,10 @@ class Filewriter:
                 self.__filehandle = None
             self.__logger.info("File '%s' closed.", self.__filename)
 
-    async def write(self, lines):
+    async def write(self, lines) -> None:
+        """Write the lines directly to the file, bypassing the queue. Used for the header."""
+        if self.__filehandle is None:
+            raise RuntimeError("The file writer is not running. Use it as a context manager.")
         for line in lines:
             await self.__filehandle.write(line)
 
