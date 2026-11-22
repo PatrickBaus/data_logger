@@ -10,15 +10,18 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-from __future__ import annotations
-
-import asyncio
-import logging
 
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # ##### END GPL LICENSE BLOCK #####
+"""An asyncio TCP connection used by the ethernet enabled instruments."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import Any
 
 
 class NotConnectedError(ConnectionError):
@@ -28,31 +31,53 @@ class NotConnectedError(ConnectionError):
 
 
 class AsyncEthernet:
+    """
+    A line based TCP connection. Reads return raw bytes including the separator.
+    """
+
     @property
-    def separator(self):
+    def separator(self) -> bytes:
+        """The line separator used by `read()`."""
         return self.__separator
 
     @separator.setter
-    def separator(self, value):
+    def separator(self, value: bytes) -> None:
         self.__separator = value
 
     @property
-    def timeout(self):
+    def timeout(self) -> float:
+        """The default timeout in seconds."""
         return self.__timeout
 
     @property
-    def is_connected(self):
+    def is_connected(self) -> bool:
+        """True if the connection is open."""
         return self.__writer is not None and not self.__writer.is_closing()
 
-    def __init__(self, host, port, separator=b"\n", timeout=None, **kwargs):
+    def __init__(
+        self, host: str, port: int, separator: bytes = b"\n", timeout: float | None = None, **kwargs: Any
+    ) -> None:
         self.__host = host, port
         self.__separator = separator
         self.__kwargs = kwargs
         self.__timeout = 0.1 if timeout is None else timeout  # in seconds
-        self.__reader, self.__writer = None, None
+        self.__reader: asyncio.StreamReader | None = None
+        self.__writer: asyncio.StreamWriter | None = None
         self.__logger = logging.getLogger(__name__)
 
-    async def read(self, length: int | None = None, timeout: float | None = None):
+    async def read(self, length: int | None = None, timeout: float | None = None) -> bytes:
+        """
+        Read until the separator or, if `length` is given, exactly `length` bytes.
+
+        Raises
+        ------
+        NotConnectedError
+            If the connection is not open
+        ConnectionError
+            If the remote end closed the connection
+        TimeoutError
+            If no data arrived in time
+        """
         if self.is_connected:
             if length is None:
                 coro = self.__reader.readuntil(self.__separator)
@@ -63,14 +88,16 @@ class AsyncEthernet:
         else:
             raise NotConnectedError(f"Cannot read from {self.__host[0]}:{self.__host[1]}. Not connected.")
 
-    async def write(self, cmd, timeout: float | None = None):
+    async def write(self, cmd: bytes, timeout: float | None = None) -> None:
+        """Write the bytes and wait until they are sent."""
         if self.is_connected:
             self.__writer.write(cmd)
             await asyncio.wait_for(self.__writer.drain(), timeout=self.__timeout if timeout is None else timeout)
         else:
             raise NotConnectedError(f"Cannot write to {self.__host[0]}:{self.__host[1]}. Not connected.")
 
-    async def connect(self):
+    async def connect(self) -> None:
+        """Open the connection, unless it is already open."""
         if not self.is_connected:
             host, port = self.__host
             self.__reader, self.__writer = await asyncio.wait_for(
@@ -78,7 +105,8 @@ class AsyncEthernet:
             )
             self.__logger.info("Ethernet connection established to '%s:%d'", host, port)
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
+        """Close the connection. The connection is always removed, even if closing fails."""
         if self.is_connected:
             try:
                 # self.__reader._transport.close()  # This is (probably) not needed
@@ -86,7 +114,7 @@ class AsyncEthernet:
                     self.__writer.close()
                     await self.__writer.wait_closed()
                 except ConnectionResetError:
-                    pass  # We are no loger connected, so we can ignore it
+                    pass  # We are no longer connected, so we can ignore it
             finally:
                 # We guarantee, that the connection is removed
                 self.__writer, self.__reader = None, None
