@@ -8,6 +8,7 @@ from decimal import Decimal
 
 import pytest
 
+from errors import UnknownDriverError
 from factories import device_factory
 from logger.logger import DataEvent, Keithley2002ScannerLogger, Keysight34470ALogger, to_decimal
 
@@ -74,3 +75,10 @@ def test_k2002_scanner_column_names() -> None:
 def test_device_factory_creates_devices_from_config() -> None:
     logger = device_factory.get(driver="ks34470a", host="127.0.0.1", port=5025, timeout=1, uuid=UUID_A)
     assert isinstance(logger, Keysight34470ALogger)
+
+
+def test_device_factory_knows_the_drivers() -> None:
+    assert device_factory.has("ks34470a")
+    assert not device_factory.has("unknown")
+    with pytest.raises(UnknownDriverError, match="No driver available for unknown"):
+        device_factory.get(driver="unknown")

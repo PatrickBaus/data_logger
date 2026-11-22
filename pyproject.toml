@@ -76,6 +76,12 @@ relative_files = true
 
 [tool.coverage.report]
 show_missing = true
+# Every line and branch must be tested. pytest-cov uses this, so "pytest --cov" fails below 100 %.
+fail_under = 100
+exclude_also = [
+    # Runs the logger as a script. The tests call main() instead.
+    'if __name__ == "__main__":',
+]
 
 [tool.pylint.main]
 py-version = "3.12"

@@ -175,7 +175,7 @@ class MqttWriter:
         error_code: Any = 0  # 0 = success, otherwise an errno or an MQTT reason code
         item: tuple[datetime.datetime, tuple[DataEvent, ...]] | None = None
         last_reconnect_attempt = asyncio.get_running_loop().time() - reconnect_interval
-        for host in itertools.cycle(self.__mqtt_params.hosts):
+        for host in itertools.cycle(self.__mqtt_params.hosts):  # pragma: no branch  # An endless loop
             # Wait for at least reconnect_interval before connecting again
             timeout = self._calculate_timeout(last_reconnect_attempt, reconnect_interval)
             if timeout > 0:

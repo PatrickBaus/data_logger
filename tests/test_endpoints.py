@@ -160,3 +160,46 @@ def test_mqtt_worker_reconnects_after_errors(
     assert "Temporary failure in name resolution of MQTT server (broker1:1883). Retrying." in messages  # 5th attempt
     assert "Error while publishing data to MQTT broker. Reconnecting." in messages
     assert messages.count("MQTT Connection error. Retrying.") == 3  # Errno 113, no errno, the failed publish
+
+
+async def _join_timeout() -> None:
+    raise TimeoutError()
+
+
+def test_mqtt_flush_timeout_is_logged(mqtt_client: type[FakeMqttClient], caplog: pytest.LogCaptureFixture) -> None:
+    """If the broker cannot be reached, the queue is not flushed. The writer gives up after 3 s."""
+    mqtt_client.connect_errors = [ConnectionRefusedError()] * 100
+
+    async def test() -> None:
+        writer = MqttWriter(hosts="broker", username=None, password=None, number_of_workers=1)
+        async with writer as queue:
+            queue.put_nowait((TIMESTAMP, (event(1, topic="sensors/a"),)))
+            queue.join = _join_timeout  # type: ignore[method-assign]
+
+    asyncio.run(test())
+    assert "Timeout while flushing the MQTT writer." in caplog.text
+
+
+def test_filewriter_exit_without_enter_is_a_no_op(tmp_path: Path) -> None:
+    asyncio.run(Filewriter(filename=str(tmp_path / "x.csv"), descriptor="").__aexit__(None, None, None))
+    assert not list(tmp_path.iterdir())
+
+
+def test_filewriter_flush_timeout_is_logged(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    async def test() -> None:
+        async with Filewriter(filename=str(tmp_path / "x.csv"), descriptor="") as queue:
+            queue.join = _join_timeout  # type: ignore[method-assign]
+
+    asyncio.run(test())
+    assert "Timeout while flushing the file writer." in caplog.text
+
+
+def test_filewriter_write_error_is_logged(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    """An item, that cannot be written, stops the writer. The error is logged on shutdown."""
+
+    async def test() -> None:
+        async with Filewriter(filename=str(tmp_path / "x.csv"), descriptor="") as queue:
+            queue.put_nowait((TIMESTAMP, 42))  # type: ignore[arg-type]  # not a tuple of events
+
+    asyncio.run(test())
+    assert "Error during shutdown of the file writer" in caplog.text
