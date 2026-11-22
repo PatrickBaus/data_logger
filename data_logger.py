@@ -29,18 +29,19 @@ import logging
 import signal
 import sys
 import warnings
-from collections.abc import AsyncIterator, Awaitable
+from collections.abc import AsyncIterator, Awaitable, Sequence
 from contextlib import AsyncExitStack
 from datetime import datetime, timezone
+from decimal import InvalidOperation
 from itertools import chain
 from types import TracebackType
-from typing import Self, cast
+from typing import Any, Self, cast
 
 import yaml
 
 from _version import __version__
 from factories import device_factory, endpoint_factory
-from logger.logger import DataEvent
+from logger.logger import DataEvent, LoggingDevice
 
 DEFAULT_WAIT_TIMEOUT = 10  # in seconds
 DEFAULT_RECONNECT_INTERVAL = 5  # in seconds
@@ -59,7 +60,7 @@ class DataGenerator:
 
     async def __aenter__(self) -> Self:
         self.__logger.info("Initializing devices")
-        self.__logger.debug("Devices to initialize: %s.", devices)
+        self.__logger.debug("Devices to initialize: %s.", self.__sensors)
         # Connect to all devices
         coros = [device.connect() for device in self.__sensors]
         results = await asyncio.gather(*coros, return_exceptions=True)
@@ -132,34 +133,29 @@ class DataGenerator:
                 coros.append(asyncio.sleep(time_interval))
                 #  Strip the None result from sleep() at the end
                 results = tuple((await asyncio.gather(*coros, return_exceptions=True))[:-1])
-                done = True
-                for result in results:
-                    # We will raise the first error later.
-                    if isinstance(result, BaseException):
-                        done = False
-                    if isinstance(result, Exception):
-                        # Log all exceptions (except Timeouts, we will log it and retry later).
-                        if not isinstance(result, TimeoutError):
-                            self.__logger.error("Error during read.", exc_info=result)
-                if done:  # pylint: disable=no-else-return
-                    results = cast(tuple[tuple[DataEvent], ...], results)  # done is false if there are BaseExceptions
-                    yield datetime.now(timezone.utc), tuple(sum(results, ()))  # flatten the tuple of tuples
-                else:
-                    # raise the first exception
-                    for result in results:
-                        if isinstance(result, Exception):
-                            raise result
+                errors = [result for result in results if isinstance(result, BaseException)]
+                for error in errors:
+                    # Log all exceptions (except Timeouts, we will log it and retry later).
+                    if isinstance(error, Exception) and not isinstance(error, TimeoutError):
+                        self.__logger.error("Error during read.", exc_info=error)
+                if errors:
+                    # Raise the first error. This includes BaseExceptions like asyncio.CancelledError, which must not
+                    # be swallowed.
+                    raise errors[0]
+
+                events = cast(tuple[tuple[DataEvent, ...], ...], results)  # all results are data, errors were raised
+                yield datetime.now(timezone.utc), tuple(chain.from_iterable(events))  # flatten the tuple of tuples
 
                 # Run post-read
-                coros = [device.post_read() for device in self.__sensors]
-                await asyncio.gather(*coros)
-            except ValueError:
+                await asyncio.gather(*[device.post_read() for device in self.__sensors])
+            except (ValueError, InvalidOperation):
+                # InvalidOperation is raised by Decimal() and is not a ValueError
                 self.__logger.error("Sensor read invalid data. Retrying.")
-            except asyncio.TimeoutError:
+            except TimeoutError:
+                # This includes OSError(errno.ETIMEDOUT), Python raises it as TimeoutError.
                 self.__logger.error("Timeout during read. Retrying.")
-            except OSError as e:
-                if e.errno == 110:
-                    self.__logger.error("Network unreachable. Retrying.")
+            # Other errors, like OSError(errno.ENETUNREACH) "Network is unreachable", are raised to the logging
+            # daemon, which reconnects after the reconnect interval.
 
 
 class LoggingDaemon:  # pylint: disable=too-few-public-methods
@@ -179,6 +175,7 @@ class LoggingDaemon:  # pylint: disable=too-few-public-methods
             endpoint: endpoint_factory.get(driver=endpoint, **endpoints[endpoint]) for endpoint in endpoints
         }
         self.__time_interval = time_interval
+        self.__reconnect_interval = reconnect_interval
 
         self.__logger = logging.getLogger(__name__)
 
@@ -208,20 +205,28 @@ class LoggingDaemon:  # pylint: disable=too-few-public-methods
         # Catch signals and shutdown. Cancel this task, not only the current attempt, so that a signal also stops the
         # logger while it is waiting to reconnect.
         signals = (signal.SIGHUP, signal.SIGTERM, signal.SIGINT)
-        while "not cancelled":
-            main_task = asyncio.create_task(self._read_sensors())
+        loop = asyncio.get_running_loop()
+        this_task = asyncio.current_task()
+        assert this_task is not None
+        for sig in signals:
+            loop.add_signal_handler(sig, this_task.cancel)
+        try:
+            while "not cancelled":
+                try:
+                    await self._read_sensors()
+                except (OSError, EOFError) as exc:
+                    self.__logger.error(
+                        "Connection error: %s. Reconnecting in %.0f s.",
+                        str(exc) or type(exc).__name__,
+                        self.__reconnect_interval,
+                    )
+                    await asyncio.sleep(self.__reconnect_interval)
+        except asyncio.CancelledError:
+            self.__logger.info("Logging daemon shut down.")
+            raise
+        finally:
             for sig in signals:
-                asyncio.get_running_loop().add_signal_handler(sig, main_task.cancel)
-            try:
-                await main_task
-            except ConnectionError as exc:
-                self.__logger.error("Connection error: %s. Reconnecting", exc)
-            except asyncio.CancelledError:
-                self.__logger.info("Logging daemon shut down.")
-                raise
-            finally:
-                for sig in signals:
-                    asyncio.get_running_loop().remove_signal_handler(sig)
+                loop.remove_signal_handler(sig)
 
 
 def init_argparse() -> argparse.ArgumentParser:
@@ -246,45 +251,56 @@ def init_argparse() -> argparse.ArgumentParser:
     return arg_parser
 
 
-# Report all mistakes managing asynchronous resources.
-warnings.simplefilter("always", ResourceWarning)
-# Enable logs from the ip connection. Set to debug for even more info
-logging.basicConfig(level=LOG_LEVEL)
+def setup_logging() -> None:
+    """Log to the console and log errors to the file errors.log."""
+    # Report all mistakes managing asynchronous resources.
+    warnings.simplefilter("always", ResourceWarning)
+    # Enable logs from the ip connection. Set to debug for even more info
+    logging.basicConfig(level=LOG_LEVEL)
 
-# Set up a file logger for errors
-logfile_handler = logging.FileHandler("errors.log")
-logfile_handler.setLevel(level=logging.ERROR)
-logfile_handler.setFormatter(logging.Formatter(fmt=ERROR_LOG_FMT, datefmt="%Y-%m-%d %H:%M:%S"))
-logging.getLogger().addHandler(logfile_handler)
+    # Set up a file logger for errors
+    logfile_handler = logging.FileHandler("errors.log")
+    logfile_handler.setLevel(level=logging.ERROR)
+    logfile_handler.setFormatter(logging.Formatter(fmt=ERROR_LOG_FMT, datefmt="%Y-%m-%d %H:%M:%S"))
+    logging.getLogger().addHandler(logfile_handler)
 
-try:
-    parser = init_argparse()
-    args = parser.parse_args()
 
+def main(argv: Sequence[str] | None = None) -> None:
+    """Parse the command line, load the configuration and run the logger."""
+    setup_logging()
     try:
-        with open(args.config_file, "r", encoding="utf-8") as file:
-            measurement_config = yaml.safe_load(file)
-    except FileNotFoundError:
-        logging.getLogger(__name__).error("Config file not found")
-        parser.print_help()
-        sys.exit(1)
+        parser = init_argparse()
+        args = parser.parse_args(argv)
 
-    devices = [device_factory.get(**device_config) for device_config in measurement_config.get("devices", [])]
+        try:
+            with open(args.config_file, "r", encoding="utf-8") as file:
+                measurement_config = yaml.safe_load(file)
+        except FileNotFoundError:
+            logging.getLogger(__name__).error("Config file not found")
+            parser.print_help()
+            sys.exit(1)
 
-    logging_daemon = LoggingDaemon(
-        endpoints=measurement_config["endpoints"],
-        logging_devices=devices,
-        time_interval=0,
-    )
+        devices = [device_factory.get(**device_config) for device_config in measurement_config.get("devices", [])]
 
-    asyncio.run(logging_daemon.run(), debug=False)
-except KeyboardInterrupt:
-    # The loop will be canceled on a KeyboardInterrupt by the run() method, we
-    # just want to suppress the exception
-    pass
-except asyncio.CancelledError:
-    # The program will terminate now, so we swallow the error to supress
-    # the error message
-    pass
-finally:
-    logging.getLogger(__name__).info("Datalogger terminated. Have fun analyzing the data.")
+        logging_daemon = LoggingDaemon(
+            endpoints=measurement_config.get("endpoints", {}),
+            logging_devices=devices,
+            time_interval=measurement_config.get("time_interval", 0),
+            reconnect_interval=measurement_config.get("reconnect_interval", DEFAULT_RECONNECT_INTERVAL),
+        )
+
+        asyncio.run(logging_daemon.run(), debug=False)
+    except KeyboardInterrupt:
+        # The loop will be canceled on a KeyboardInterrupt by the run() method, we
+        # just want to suppress the exception
+        pass
+    except asyncio.CancelledError:
+        # The program will terminate now, so we swallow the error to suppress
+        # the error message
+        pass
+    finally:
+        logging.getLogger(__name__).info("Datalogger terminated. Have fun analyzing the data.")
+
+
+if __name__ == "__main__":
+    main()
