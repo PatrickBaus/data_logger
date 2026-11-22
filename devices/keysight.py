@@ -88,7 +88,7 @@ class Hp3458A:
             raise ValueError(f"Could not convert {result} to Decimal") from exc
 
     async def get_temperature_acal_dcv(self) -> Decimal:
-        result = Decimal(await self.query("CAL? 175"))
+        result = await self.query("CAL? 175")
 
         try:
             return Decimal(result)
@@ -96,7 +96,7 @@ class Hp3458A:
             raise ValueError(f"Could not convert {result} to Decimal") from exc
 
     async def get_temperature(self) -> Decimal:
-        result = Decimal(await self.query("TEMP?"))
+        result = await self.query("TEMP?")
 
         try:
             return Decimal(result)
@@ -167,7 +167,7 @@ class Keysight34470A:
     async def get_cal_data(self) -> tuple[datetime, Decimal, str]:
         cal_date_str = f"{await self.query('CALibration:DATE?')} {await self.query('CALibration:TIME?')}"
         cal_datetime = datetime.strptime(cal_date_str, "+%Y,+%m,+%d %H,%M,%S.%f").replace(tzinfo=timezone.utc)
-        cal_temperature = Decimal(await self.query("CALibration:TEMPerature?"))
+        cal_temperature = await self.query("CALibration:TEMPerature?")
         cal_str = await self.query("CALibration:STRing?")
 
         try:

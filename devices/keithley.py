@@ -163,7 +163,7 @@ class Keithley26xxB:
     async def get_model(self) -> str:
         return await self.query("print(localnode.model)")
 
-    async def write(self, cmd: str, test_error: bool = False) -> None:
+    async def write(self, cmd: str) -> None:
         await self.__conn.write((cmd + "\n").encode("ascii"))
 
     async def __read(self, length: int | None = None) -> str:

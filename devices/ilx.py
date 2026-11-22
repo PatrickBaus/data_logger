@@ -91,8 +91,8 @@ class LDT5948:
         except InvalidOperation as exc:
             raise ValueError(f"Could not convert {result} to Decimal") from exc
 
-    async def set_enabled(self, value):
-        await self.write(f"OUTPUT {bool(value)}")
+    async def set_enabled(self, value: bool) -> None:
+        await self.write(f"OUTPUT {int(bool(value))}")
 
     async def is_enabled(self) -> bool:
         result: str | bool = await self.query("OUTPUT?")
