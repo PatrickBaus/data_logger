@@ -78,19 +78,23 @@ class AsyncEthernet:
         TimeoutError
             If no data arrived in time
         """
-        if self.is_connected:
-            if length is None:
-                coro = self.__reader.readuntil(self.__separator)
-            else:
-                coro = self.__reader.readexactly(length)
-            data = await asyncio.wait_for(coro, timeout=self.__timeout if timeout is None else timeout)
-            return data
-        else:
+        if not self.is_connected:
             raise NotConnectedError(f"Cannot read from {self.__host[0]}:{self.__host[1]}. Not connected.")
+        assert self.__reader is not None
+        if length is None:
+            coro = self.__reader.readuntil(self.__separator)
+        else:
+            coro = self.__reader.readexactly(length)
+        try:
+            return await asyncio.wait_for(coro, timeout=self.__timeout if timeout is None else timeout)
+        except asyncio.IncompleteReadError as exc:
+            # The remote end closed the connection (EOF). Report it as a connection error, so the caller reconnects.
+            raise ConnectionError(f"Connection to {self.__host[0]}:{self.__host[1]} closed by the remote end.") from exc
 
     async def write(self, cmd: bytes, timeout: float | None = None) -> None:
         """Write the bytes and wait until they are sent."""
         if self.is_connected:
+            assert self.__writer is not None
             self.__writer.write(cmd)
             await asyncio.wait_for(self.__writer.drain(), timeout=self.__timeout if timeout is None else timeout)
         else:
@@ -108,6 +112,7 @@ class AsyncEthernet:
     async def disconnect(self) -> None:
         """Close the connection. The connection is always removed, even if closing fails."""
         if self.is_connected:
+            assert self.__writer is not None
             try:
                 # self.__reader._transport.close()  # This is (probably) not needed
                 try:

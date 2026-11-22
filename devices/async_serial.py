@@ -95,6 +95,9 @@ class AsyncSerial:  # pylint: disable=too-many-instance-attributes
         self.__writer: asyncio.StreamWriter | None = None
         self.__logger = logging.getLogger(__name__)
 
+    def __str__(self) -> str:
+        return f"AsyncSerial({self.__tty})"
+
     async def read(self, length=None):
         if self.is_connected:
             if length is None:
