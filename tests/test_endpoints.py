@@ -6,11 +6,11 @@ import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 
+import aiomqtt
 import pytest
 from pydantic import ValidationError
 
 from endpoints import Filewriter, MqttWriter
-from endpoints import mqtt as mqtt_module
 from endpoints.mqtt import MQTTParams
 
 from .fakes import event
@@ -85,7 +85,7 @@ class FakeMqttClient:  # pylint: disable=missing-function-docstring
 def test_mqtt_invalid_event_does_not_block_the_queue(monkeypatch):
     """An event with an empty topic used to be retried forever and block the worker."""
     FakeMqttClient.published = []
-    monkeypatch.setattr(mqtt_module.aiomqtt, "Client", FakeMqttClient)
+    monkeypatch.setattr(aiomqtt, "Client", FakeMqttClient)
 
     async def test():
         writer = MqttWriter(hosts="localhost", username=None, password=None, number_of_workers=1)

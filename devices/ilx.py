@@ -20,6 +20,8 @@ import asyncio
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 
+from devices.async_serial import AsyncSerial
+
 
 class LdtMode(Enum):
     T = "T"
@@ -31,10 +33,10 @@ class LdtMode(Enum):
 
 class LDT5948:
     @property
-    def connection(self):
+    def connection(self) -> AsyncSerial:
         return self.__conn
 
-    def __init__(self, conn) -> None:
+    def __init__(self, conn: AsyncSerial) -> None:
         self.__conn = conn
         self.__lock: asyncio.Lock | None = None
 
@@ -104,7 +106,7 @@ class LDT5948:
             raise ValueError(f"Invalid return value: {result}")
         return result
 
-    async def set_pid_constants(self, kp, ki, kd):  # pylint: disable=invalid-name
+    async def set_pid_constants(self, kp: float, ki: float, kd: float) -> None:  # pylint: disable=invalid-name
         assert 0 <= kp <= 9999.99
         assert 0 <= ki <= 999.999
         assert 0 <= kd <= 999.999
@@ -113,13 +115,12 @@ class LDT5948:
     async def get_pid_constants(self) -> tuple[Decimal, Decimal, Decimal]:
         result = await self.query("PID?")
         try:
-            results = tuple(map(Decimal, result.split(",")))
-            assert len(results) == 3
-            return results
+            kp, ki, kd = map(Decimal, result.split(","))  # pylint: disable=invalid-name
+            return kp, ki, kd
         except InvalidOperation as exc:
             raise ValueError(f"Could not convert {result} to decimal") from exc
 
-    async def set_temperature_setpoint(self, value):
+    async def set_temperature_setpoint(self, value: float) -> None:
         await self.write(f"SET:TEMP {value:.3f}")
 
     async def get_temperature_setpoint(self) -> Decimal:
@@ -129,13 +130,13 @@ class LDT5948:
         except InvalidOperation as exc:
             raise ValueError(f"Could not convert {result} to decimal") from exc
 
-    async def set_mode(self, mode):
+    async def set_mode(self, mode: LdtMode) -> None:
         await self.write(f"MODE {mode.value}")
 
     async def get_mode(self) -> LdtMode:
         return LdtMode(await self.query("MODE?"))
 
-    async def set_current_setpoint(self, value):
+    async def set_current_setpoint(self, value: float) -> None:
         await self.write(f"SET:ITE {value:.3f}")
 
     async def get_current_setpoint(self) -> Decimal:

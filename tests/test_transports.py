@@ -6,8 +6,9 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
+import serial.tools.list_ports
+import serial_asyncio
 
-from devices import async_serial
 from devices.async_ethernet import AsyncEthernet
 from devices.async_serial import AsyncSerial, find_device_by_vid
 from devices.errors import NotConnectedError
@@ -113,12 +114,12 @@ def test_serial_not_connected_raises():
 )
 def test_serial_error_messages_describe_the_port(monkeypatch, kwargs, comports, expected):
     """A port configured by its VID/PID has no tty until the device is found. The messages used to say "None"."""
-    monkeypatch.setattr(async_serial.serial.tools.list_ports, "comports", _ports(*comports))
+    monkeypatch.setattr(serial.tools.list_ports, "comports", _ports(*comports))
 
     async def open_serial_connection(url, **_kwargs):
         raise ConnectionRefusedError(url)
 
-    monkeypatch.setattr(async_serial.serial_asyncio, "open_serial_connection", open_serial_connection)
+    monkeypatch.setattr(serial_asyncio, "open_serial_connection", open_serial_connection)
     conn = AsyncSerial(**kwargs)
     with pytest.raises((ConnectionError, ConnectionRefusedError)):
         asyncio.run(conn.connect())  # looks up the tty, if configured by VID/PID
@@ -134,7 +135,7 @@ def _ports(*ports):
 
 def test_find_device_by_vid(monkeypatch):
     monkeypatch.setattr(
-        async_serial.serial.tools.list_ports,
+        serial.tools.list_ports,
         "comports",
         _ports((0x0403, 0x6001, "A", "/dev/ttyUSB0"), (0x0403, 0x6001, "B", "/dev/ttyUSB1")),
     )
@@ -146,7 +147,7 @@ def test_find_device_by_vid(monkeypatch):
 
 def test_serial_device_is_looked_up_on_connect(monkeypatch):
     """A missing USB adapter must not fail at startup, but raise a ConnectionError on connect, so it is retried."""
-    monkeypatch.setattr(async_serial.serial.tools.list_ports, "comports", _ports())
+    monkeypatch.setattr(serial.tools.list_ports, "comports", _ports())
     conn = AsyncSerial(vid_pid=(0x0403, 0x6001), serial_number="AC01QN76")  # does not raise
     with pytest.raises(ConnectionError, match="No serial device found with VID:PID 0403:6001, serial number AC01QN76."):
         asyncio.run(conn.connect())
@@ -157,10 +158,8 @@ def test_serial_device_is_looked_up_on_connect(monkeypatch):
         opened.append(url)
         raise ConnectionRefusedError("stop here")
 
-    monkeypatch.setattr(
-        async_serial.serial.tools.list_ports, "comports", _ports((0x0403, 0x6001, "AC01QN76", "/dev/X"))
-    )
-    monkeypatch.setattr(async_serial.serial_asyncio, "open_serial_connection", open_serial_connection)
+    monkeypatch.setattr(serial.tools.list_ports, "comports", _ports((0x0403, 0x6001, "AC01QN76", "/dev/X")))
+    monkeypatch.setattr(serial_asyncio, "open_serial_connection", open_serial_connection)
     with pytest.raises(ConnectionRefusedError):
         asyncio.run(conn.connect())
     assert opened == ["/dev/X"]

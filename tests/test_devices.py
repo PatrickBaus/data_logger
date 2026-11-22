@@ -12,19 +12,19 @@ import pytest
 from devices import LDT5948, Fluke1590, Hp3458A, Keithley26xxB, Keithley2002, KeithleyDMM6500, Keysight34470A
 from devices.fluke import InvalidDataError
 
-from .fakes import FakeConnection, FakeStrConnection
+from .fakes import FakeConnection, FakeStrConnection, as_transport
 
 
 @pytest.mark.parametrize("method, cmd", [("get_temperature", "TEMP?"), ("get_temperature_acal_dcv", "CAL? 175")])
 def test_hp3458a_invalid_reply_raises_value_error(method, cmd):
     """The conversion used to happen outside the try block and leak decimal.InvalidOperation."""
-    device = Hp3458A(FakeConnection({cmd: "garbage"}))
+    device = Hp3458A(as_transport(FakeConnection({cmd: "garbage"})))
     with pytest.raises(ValueError, match="garbage"):
         asyncio.run(getattr(device, method)())
 
 
 def test_hp3458a_temperature():
-    device = Hp3458A(FakeConnection({"TEMP?": "35.6"}))
+    device = Hp3458A(as_transport(FakeConnection({"TEMP?": "35.6"})))
     assert asyncio.run(device.get_temperature()) == Decimal("35.6")
 
 
@@ -38,7 +38,7 @@ def _ks_cal_replies(temperature: str) -> dict[str, str | bytes]:
 
 
 def test_keysight34470a_cal_data():
-    device = Keysight34470A(FakeConnection(_ks_cal_replies("+2.35E+01")))
+    device = Keysight34470A(as_transport(FakeConnection(_ks_cal_replies("+2.35E+01"))))
     cal_date, temperature, cal_str = asyncio.run(device.get_cal_data())
     assert cal_date == datetime(2024, 1, 2, 12, 30, tzinfo=timezone.utc)
     assert temperature == Decimal("23.5")
@@ -46,7 +46,7 @@ def test_keysight34470a_cal_data():
 
 
 def test_keysight34470a_invalid_cal_temperature_raises_value_error():
-    device = Keysight34470A(FakeConnection(_ks_cal_replies("garbage")))
+    device = Keysight34470A(as_transport(FakeConnection(_ks_cal_replies("garbage"))))
     with pytest.raises(ValueError):
         asyncio.run(device.get_cal_data())
 
@@ -55,7 +55,7 @@ def test_keysight34470a_invalid_cal_temperature_raises_value_error():
 def test_ldt5948_set_enabled(value, expected):
     """It used to send "OUTPUT True" and "OUTPUT False"."""
     conn = FakeStrConnection({expected: ""}, terminator="\r\n")
-    device = LDT5948(conn)
+    device = LDT5948(as_transport(conn))
 
     async def test():
         await device.connect()
@@ -66,7 +66,7 @@ def test_ldt5948_set_enabled(value, expected):
 
 
 async def _connected_fluke(replies: dict[str, str | bytes]) -> Fluke1590:
-    device = Fluke1590(FakeConnection(replies))
+    device = Fluke1590(as_transport(FakeConnection(replies)))
     await device.connect()
     return device
 
@@ -122,7 +122,7 @@ def test_fluke1590_get_screensaver(reply, expected):
 
 def test_fluke1590_query_requires_connection():
     with pytest.raises(ConnectionError):
-        asyncio.run(Fluke1590(FakeConnection()).query("v"))
+        asyncio.run(Fluke1590(as_transport(FakeConnection())).query("v"))
 
 
 @pytest.mark.parametrize("driver", [Keysight34470A, KeithleyDMM6500, Keithley26xxB, Keithley2002])

@@ -92,7 +92,7 @@ def test_daemon_reconnects_with_a_delay(monkeypatch, error):
             raise asyncio.CancelledError()  # stop the daemon
         return await real_sleep(0)
 
-    monkeypatch.setattr(data_logger.asyncio, "sleep", sleep)
+    monkeypatch.setattr(asyncio, "sleep", sleep)
     daemon = LoggingDaemon(logging_devices=[sensor], endpoints={}, reconnect_interval=7)
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(daemon.run())

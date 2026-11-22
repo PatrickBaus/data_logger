@@ -19,13 +19,15 @@
 import asyncio
 from decimal import Decimal, InvalidOperation
 
+from devices.async_serial import AsyncSerial
+
 
 class EE07:
     @property
-    def connection(self):
+    def connection(self) -> AsyncSerial:
         return self.__conn
 
-    def __init__(self, conn) -> None:
+    def __init__(self, conn: AsyncSerial) -> None:
         self.__conn = conn
         self.__lock: asyncio.Lock | None = None
 

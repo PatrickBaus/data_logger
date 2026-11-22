@@ -107,7 +107,7 @@ class MqttWriter:
         )
         self.__number_of_workers = int(number_of_workers)
         self.__write_queue: asyncio.Queue[tuple[datetime.datetime, tuple[DataEvent, ...]]] = asyncio.Queue()
-        self.__running_tasks: set[asyncio.Task] = set()
+        self.__running_tasks: set[asyncio.Task[None]] = set()
         self.__logger = logging.getLogger(__name__)
 
     @staticmethod
@@ -237,7 +237,7 @@ class MqttWriter:
                 # Catch all exceptions, log them, then try to restart the worker.
                 self.__logger.exception("Error while publishing data to MQTT broker. Reconnecting.")
 
-    async def __aenter__(self) -> asyncio.Queue:
+    async def __aenter__(self) -> asyncio.Queue[tuple[datetime.datetime, tuple[DataEvent, ...]]]:
         self.__logger.info("Initializing MQTT writer")
 
         consumers = {asyncio.create_task(self._consumer()) for _ in range(self.__number_of_workers)}

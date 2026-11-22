@@ -74,7 +74,7 @@ class KeithleyDMM6500:
     async def set_mode_resistance_2w(self) -> None:
         await self.write("SENS:FUNC 'RES'")
 
-    async def set_nplc(self, nplc) -> None:
+    async def set_nplc(self, nplc: float) -> None:
         await self.write(f"SENS:RES:NPLC {nplc}")
 
     async def read(self) -> str | None:

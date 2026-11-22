@@ -4,18 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import Any
 
 import pytest
 
 from errors import ConfigurationError
 from logger.logger import LoggingDevice, PostReadCommand, evaluate_delay
 
-from .fakes import UUID_A, FakeConnection
+from .fakes import UUID_A, FakeDevice
 
 
-def _post_read(commands: list, rounds: int, pause: float = 0) -> list[list[str]]:
+def _post_read(commands: list[Any], rounds: int, pause: float = 0) -> list[list[str]]:
     """Run post_read() several times and return the commands sent in each round."""
-    conn = FakeConnection()
+    conn = FakeDevice()
     device = LoggingDevice(conn, uuid=UUID_A, post_read_commands=commands)
 
     async def run():
@@ -83,7 +84,7 @@ def test_repeat_count_does_not_modify_the_configuration():
 )
 def test_invalid_configuration_is_reported_at_startup(config):
     with pytest.raises(ConfigurationError):
-        LoggingDevice(FakeConnection(), uuid=UUID_A, post_read_commands=[config])
+        LoggingDevice(FakeDevice(), uuid=UUID_A, post_read_commands=[config])
 
 
 def test_post_read_command_from_config():
