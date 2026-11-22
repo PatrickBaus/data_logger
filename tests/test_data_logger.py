@@ -1,0 +1,126 @@
+"""Tests of the data generator and the logging daemon."""
+
+from __future__ import annotations
+
+import asyncio
+from decimal import Decimal, InvalidOperation
+
+import pytest
+
+import data_logger
+from data_logger import DataGenerator, LoggingDaemon
+
+from .fakes import FakeSensor, raises, returns
+
+
+async def _collect(generator: DataGenerator, count: int) -> list[tuple[object, ...]]:
+    results = []
+    async for _timestamp, data in generator.read_sensors(time_interval=0):
+        results.append(tuple(item.value for item in data))
+        if len(results) == count:
+            break
+    return results
+
+
+def test_read_sensors_flattens_the_data():
+    sensors = [FakeSensor([returns(1, 2), returns(4, 5)]), FakeSensor([returns(3), returns(6)])]
+    assert asyncio.run(_collect(DataGenerator(sensors), 2)) == [(1, 2, 3), (4, 5, 6)]
+    assert sensors[0].post_reads == 1  # run between the two reads
+
+
+@pytest.mark.parametrize(
+    "error",
+    [ValueError("bad"), InvalidOperation(), TimeoutError()],
+    ids=["ValueError", "InvalidOperation", "TimeoutError"],
+)
+def test_read_sensors_retries_after_invalid_data(error):
+    """InvalidOperation from Decimal() is not a ValueError and used to crash the logger."""
+    sensor = FakeSensor([raises(error), returns(Decimal("1.5"))])
+    assert asyncio.run(_collect(DataGenerator([sensor]), 1)) == [(Decimal("1.5"),)]
+
+
+def test_read_sensors_raises_connection_errors():
+    sensor = FakeSensor([raises(ConnectionResetError("lost"))])
+    with pytest.raises(ConnectionResetError):
+        asyncio.run(_collect(DataGenerator([sensor]), 1))
+
+
+def test_read_sensors_raises_cancelled_error():
+    """A cancelled read used to be skipped silently."""
+    sensor = FakeSensor([raises(asyncio.CancelledError())])
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(_collect(DataGenerator([sensor]), 1))
+
+
+def test_failed_connect_disconnects_the_other_devices():
+    good = FakeSensor()
+    bad = FakeSensor(connect_error=ConnectionRefusedError("refused"))
+
+    async def test():
+        async with DataGenerator([good, bad]):
+            pass
+
+    with pytest.raises(ConnectionRefusedError):
+        asyncio.run(test())
+    assert good.connect_calls == 1 and not good.connected
+
+
+def test_get_header():
+    sensors = [FakeSensor(column_names=["a", "b"]), FakeSensor(column_names=["c"])]
+    header = asyncio.run(DataGenerator(sensors).get_header())
+    assert header[0] == "# Fake sensor\n"
+    assert header[2].startswith("# Log started at UTC: ")
+    assert header[-1] == "# Date,a,b,c\n"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [ConnectionRefusedError("refused"), TimeoutError(), EOFError(), OSError("I/O error")],
+    ids=["ConnectionRefusedError", "TimeoutError", "EOFError", "OSError"],
+)
+def test_daemon_reconnects_with_a_delay(monkeypatch, error):
+    """Connection errors cause a reconnect after the reconnect interval, not a crash or a busy loop."""
+    sensor = FakeSensor(connect_error=error)
+    sleeps = []
+    real_sleep = asyncio.sleep
+
+    async def sleep(delay, *args):
+        if delay == 0:  # asyncio.sleep(0) of the fake sensor
+            return await real_sleep(0, *args)
+        sleeps.append(delay)
+        if len(sleeps) == 3:
+            raise asyncio.CancelledError()  # stop the daemon
+        return await real_sleep(0)
+
+    monkeypatch.setattr(data_logger.asyncio, "sleep", sleep)
+    daemon = LoggingDaemon(logging_devices=[sensor], endpoints={}, reconnect_interval=7)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(daemon.run())
+    assert sensor.connect_calls == 3
+    assert sleeps == [7, 7, 7]
+
+
+def test_daemon_does_not_swallow_other_errors():
+    sensor = FakeSensor([raises(RuntimeError("bug"))])
+    daemon = LoggingDaemon(logging_devices=[sensor], endpoints={})
+    with pytest.raises(RuntimeError):
+        asyncio.run(daemon.run())
+
+
+def test_daemon_stops_when_cancelled():
+    async def test():
+        daemon = LoggingDaemon(logging_devices=[FakeSensor()], endpoints={})
+        task = asyncio.create_task(daemon.run())
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await task
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(test())
+
+
+def test_main_without_config_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit) as exc_info:
+        data_logger.main(["-c", "does_not_exist.yml"])
+    assert exc_info.value.code == 1
