@@ -107,7 +107,7 @@ python_version = "3.12"
 
 [[tool.mypy.overrides]]
 # These libraries do not ship type hints
-module = ["async_gpib", "gpib_ctypes.*", "prologix_gpib_async", "serial_asyncio", "tinkerforge_async", "tinkerforge_async.*"]
+module = ["gpib_ctypes.*", "serial_asyncio"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
