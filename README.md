@@ -228,6 +228,9 @@ pytest
 pytest --cov  # with coverage
 ```
 
+The tests must cover every line and branch of the code: `pytest --cov` fails below 100 %, and so does the "Code
+Coverage" workflow of pull requests.
+
 Before committing, `pre-commit run --all-files` runs black, isort, pylint and mypy.
 
 ## License

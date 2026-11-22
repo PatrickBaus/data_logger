@@ -23,6 +23,8 @@ from devices.connections import gpib as gpib_module
 from devices.connections import prologix as prologix_module
 from devices.errors import NotConnectedError
 
+from .fakes import FakeConnection
+
 _Handler = Callable[[asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]]
 _Port = tuple[int, int, str, str]  # VID, PID, serial number, device
 
@@ -398,3 +400,115 @@ def test_prologix_serial_poll_addresses_the_instrument(fake_gpib: list[_FakeGpib
 
     asyncio.run(test())
     assert ("serial_poll", {"pad": 4}) in fake_gpib[0].calls
+
+
+def test_disconnect_is_a_no_op_if_not_connected() -> None:
+    conn = EthernetConnection(host="127.0.0.1", port=1)
+    asyncio.run(conn.disconnect())
+    assert not conn.is_connected
+
+
+@pytest.mark.parametrize("method, args", [("read", ()), ("write", (b"X",))])
+def test_connection_closed_while_waiting_for_the_lock(method: str, args: tuple[bytes, ...]) -> None:
+    """A read or write, that waits for a running query, finds the connection closed, when it gets the lock."""
+    conn = FakeConnection({"MEAS?": "1.234"})
+
+    async def test() -> None:
+        conn.read_gate = asyncio.Event()
+        query = asyncio.create_task(conn.query(b"MEAS?"))
+        while not conn.read_timeouts:  # The query holds the lock and waits for the reply
+            await asyncio.sleep(0)
+        waiting = asyncio.create_task(getattr(conn, method)(*args))
+        for _ in range(3):  # Let the read or write run until it waits for the lock
+            await asyncio.sleep(0)
+        assert not waiting.done()
+        await conn.disconnect()
+        conn.read_gate.set()
+        assert await query == b"1.234"
+        with pytest.raises(NotConnectedError, match="FakeConnection. Not connected."):
+            await waiting
+
+    asyncio.run(test())
+
+
+def test_ethernet_disconnect_ignores_a_reset_connection(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def wait_closed(_self: asyncio.StreamWriter) -> None:
+        raise ConnectionResetError("Connection reset by peer")
+
+    async def test(port: int) -> None:
+        conn = EthernetConnection(host="127.0.0.1", port=port, timeout=1)
+        await conn.connect()
+        monkeypatch.setattr(asyncio.StreamWriter, "wait_closed", wait_closed)
+        await conn.disconnect()
+        monkeypatch.undo()
+        assert not conn.is_connected
+
+    asyncio.run(_with_server(_close_when_done, test))
+
+
+def _serial_over_tcp(monkeypatch: pytest.MonkeyPatch, port: int) -> SerialConnection:
+    """A serial connection, that talks to a TCP server instead of a serial port."""
+
+    async def open_serial_connection(
+        url: str, **_kwargs: Any  # pylint: disable=unused-argument
+    ) -> tuple[asyncio.StreamReader, _SerialWriter]:
+        reader, writer = await asyncio.open_connection("127.0.0.1", port)
+        return reader, _SerialWriter(writer)
+
+    monkeypatch.setattr(serial_asyncio, "open_serial_connection", open_serial_connection)
+    return SerialConnection(tty="/dev/ttyFake", timeout=1)
+
+
+def test_serial_binary_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    raw = struct.pack("d", 1.5)
+
+    async def handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        await reader.readline()
+        writer.write(raw + b"\n")
+        await writer.drain()
+        await _close_when_done(reader, writer)
+
+    async def test(port: int) -> None:
+        conn = _serial_over_tcp(monkeypatch, port)
+        await conn.connect()
+        try:
+            assert await conn.query(b"READ?", length=8) == raw
+        finally:
+            await conn.disconnect()
+
+    asyncio.run(_with_server(handler, test))
+
+
+def test_serial_eof_is_a_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An unplugged USB adapter closes the port. The caller must see a ConnectionError, so it reconnects."""
+
+    async def handler(_reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        writer.write(b"incomplete")  # no terminator
+        await writer.drain()
+        writer.close()
+
+    async def test(port: int) -> None:
+        conn = _serial_over_tcp(monkeypatch, port)
+        await conn.connect()
+        try:
+            with pytest.raises(ConnectionError, match="Serial connection to /dev/ttyFake closed."):
+                await conn.read()
+        finally:
+            await conn.disconnect()
+
+    asyncio.run(_with_server(handler, test))
+
+
+def test_serial_disconnect_ignores_a_reset_connection(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def wait_closed(_self: asyncio.StreamWriter) -> None:
+        raise ConnectionResetError("Connection reset by peer")
+
+    async def test(port: int) -> None:
+        conn = _serial_over_tcp(monkeypatch, port)
+        await conn.connect()
+        monkeypatch.setattr(asyncio.StreamWriter, "wait_closed", wait_closed)
+        await conn.disconnect()
+        monkeypatch.undo()
+        assert not conn.is_connected
+
+    asyncio.run(_with_server(_close_when_done, test))

@@ -250,3 +250,34 @@ def test_main_writes_errors_to_the_configured_log(
 
     (log,) = (tmp_path / "logs").glob("run_*.log") if configured else tmp_path.glob("errors_*.log")
     assert "logged during the run" in log.read_text(encoding="utf-8")
+
+
+def test_disconnect_errors_are_logged(caplog: pytest.LogCaptureFixture) -> None:
+    """A device, that fails to disconnect, does not keep the others from disconnecting."""
+    failing, other = FakeSensor(disconnect_error=OSError("port gone")), FakeSensor()
+
+    async def test() -> None:
+        async with DataGenerator([failing, other]):
+            assert other.connected
+
+    asyncio.run(test())
+    assert not other.connected
+    assert "Error during shutdown of the data generator." in caplog.text
+
+
+@pytest.mark.usefixtures("root_handlers")
+@pytest.mark.parametrize("stop", [KeyboardInterrupt, asyncio.CancelledError])
+def test_main_exits_quietly_when_stopped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stop: type[BaseException], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Ctrl+C or a signal end the logger without a traceback."""
+    caplog.set_level(logging.INFO)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "config.yml").write_text("endpoints: {}\ndevices: []\n", encoding="utf-8")
+
+    async def run(_self: LoggingDaemon) -> None:
+        raise stop()
+
+    monkeypatch.setattr(LoggingDaemon, "run", run)
+    data_logger.main(["-c", "config.yml"])  # does not raise
+    assert "Datalogger terminated." in caplog.text
