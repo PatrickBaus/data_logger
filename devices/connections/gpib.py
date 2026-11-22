@@ -78,7 +78,7 @@ class GpibConnection(Connection):
 
     async def _read_until(self, terminator: bytes, timeout: float) -> bytes:
         # Reads until EOI
-        return await self.__device.read()
+        return await self.__device.read(None)
 
     async def _read_exactly(self, length: int, timeout: float) -> bytes:
         return await self.__device.read(length)

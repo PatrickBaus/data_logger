@@ -334,10 +334,17 @@ class _FakeGpibLibrary:  # pylint: disable=missing-function-docstring
         self.calls.append(("wait", mask))
 
 
+class _FakeLinuxGpib(_FakeGpibLibrary):
+    """AsyncGpib reads at most 512 bytes by default. The Prologix library reads until the end of the message."""
+
+    async def read(self, length: int | None = 512) -> bytes:
+        return await super().read(length)
+
+
 @pytest.fixture(name="fake_gpib")
 def fixture_fake_gpib(monkeypatch: pytest.MonkeyPatch) -> list[_FakeGpibLibrary]:
     _FakeGpibLibrary.instances = []
-    monkeypatch.setattr(gpib_module, "AsyncGpib", _FakeGpibLibrary)
+    monkeypatch.setattr(gpib_module, "AsyncGpib", _FakeLinuxGpib)
     monkeypatch.setattr(prologix_module, "AsyncPrologixGpibEthernetController", _FakeGpibLibrary)
     return _FakeGpibLibrary.instances
 
@@ -379,6 +386,7 @@ def test_gpib_adapters(
 
     asyncio.run(test())
     assert library.written == [b"*IDN?\n"]
+    assert library.reads[:2] == [None, None]  # Text is read until the end of the message, however long it is
     assert library.reads[-1] == 9  # 8 bytes of data and the terminator
     assert ("wait", 1 << 11) in library.calls
 
