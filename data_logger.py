@@ -76,6 +76,9 @@ class DataGenerator:
         exc: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
+        await self.__disconnect_all()
+
+    async def __disconnect_all(self) -> None:
         self.__logger.debug("Disconnecting devices.")
         coros = [device.disconnect() for device in self.__sensors]
         results = await asyncio.gather(*coros, return_exceptions=True)
