@@ -6,12 +6,14 @@ authors = [
 description = "Python3 AsyncIO data logger"
 readme = "README.md"
 license = "GPL-3.0-or-later"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Development Status :: 5 - Production/Stable",
     "Operating System :: OS Independent",
     "Intended Audience :: Developers",
@@ -19,18 +21,18 @@ classifiers = [
     "Natural Language :: English",
     "Topic :: Scientific/Engineering",
 ]
-keywords = ["data logger", "GPIB", ]
+keywords = ["data logger", "GPIB", "MQTT"]
 dynamic = ["version"]
 dependencies = [
     "aiofiles",
     "aiomqtt",
+    "async-gpib",
+    "prologix-gpib-async",
     "pydantic",
     "pyserial-asyncio",
     "PyYAML",
     "simplejson",
     "tinkerforge-async",
-    "async-gpib",
-    "prologix-gpib-async"
 ]
 
 [project.urls]
@@ -39,35 +41,20 @@ dependencies = [
 "Download" = "https://github.com/PatrickBaus/data_logger/releases"
 
 [project.optional-dependencies]
-dev = [
-    "black", "build", "isort", "mypy", "pre-commit", "pylint", "pytest", "twine",
-]
-
+# Needed to run the test suite. pytest-cov measures the coverage, see the [tool.coverage] sections below.
 test = [
-    "mypy", "pylint", "pytest", "setuptools",
+    "pytest", "pytest-cov",
 ]
-
-[tool.pylint.'MESSAGES CONTROL']
-max-line-length = 120
-
-[tool.isort]
-line_length = 120
-profile = "black"
-
-[tool.black]
-line-length = 120
-
-[tool.pytest.ini_options]
-markers = [
-    # conftest.py reorders tests moving slow ones to the end of the list
-    "slow",
+# Linters and type checkers. pylint also checks tests/, so it needs their dependencies.
+lint = [
+    "data_logger[test]",
+    "black", "isort", "mypy", "pre-commit", "pylint", "setuptools",
+    "types-aiofiles", "types-pyserial", "types-PyYAML", "types-simplejson",
 ]
-
-[build-system]
-requires = [
-    "setuptools>=84.2.1",
+# Everything needed for development
+dev = [
+    "data_logger[test,lint]",
 ]
-build-backend = "setuptools.build_meta"
 
 # The logger is an application, not a library. These are the modules and packages of the flat layout. They are listed
 # explicitly, because the automatic discovery refuses a flat layout with several top-level packages.
@@ -78,3 +65,65 @@ packages = ["devices", "endpoints", "factories", "logger"]
 [tool.setuptools.dynamic]
 # Read from _version.py. "data_logger.__version__" would import data_logger.py, which is the application itself.
 version = {attr = "_version.__version__"}
+
+[tool.coverage.run]
+# Measure only the application, not the tests
+source = ["."]
+omit = ["tests/*"]
+branch = true
+# Required by python-coverage-comment-action, it matches the paths in .coverage against the files of the repository
+relative_files = true
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.pylint.main]
+py-version = "3.12"
+
+[tool.pylint.'MESSAGES CONTROL']
+max-line-length = 120
+disable = [
+    # The instrument drivers are thin wrappers of SCPI commands, most methods are self-explanatory
+    "missing-module-docstring",
+    "missing-class-docstring",
+    "missing-function-docstring",
+    # The drivers of similar instruments share a lot of boilerplate code
+    "duplicate-code",
+    # TODO comments are kept as reminders
+    "fixme",
+]
+
+[tool.isort]
+line_length = 120
+profile = "black"
+py_version = 312
+
+[tool.black]
+line-length = 120
+target-version = ["py312"]
+
+[tool.mypy]
+python_version = "3.12"
+
+[[tool.mypy.overrides]]
+# These libraries do not ship type hints
+module = ["async_gpib", "gpib_ctypes.*", "prologix_gpib_async", "serial_asyncio", "tinkerforge_async", "tinkerforge_async.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+# The application is not installed as a package, so make the modules of the checkout importable
+pythonpath = ["."]
+testpaths = ["tests"]
+filterwarnings = [
+    # gpib-ctypes warns on import if linux-gpib is not installed. The tests do not need it.
+    "ignore:GPIB library not found:UserWarning",
+]
+markers = [
+    "slow",
+]
+
+[build-system]
+requires = [
+    "setuptools>=84.2.1",
+]
+build-backend = "setuptools.build_meta"
